@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===== ข้อมูลบริษัท =====
+model Company {
+  id         String   @id @default(cuid())
+  name       String
+  taxId      String?
+  branchCode String   @default("00000")
+  address    String?
+  phone      String?
+  email      String?
+  logo       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ===== ผังบัญชี 5 หมวด =====
+model ChartOfAccount {
+  id            String           @id @default(cuid())
+  code          String           @unique
+  nameTh        String
+  nameEn        String?
+  category      String
+  normalBalance String
+  parentId      String?
+  parent        ChartOfAccount?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children      ChartOfAccount[] @relation("AccountHierarchy")
+  isActive      Boolean          @default(true)
+  journalLines  JournalLine[]
+  createdAt     DateTime         @default(now())
+}
+
+// ===== สมุดรายวัน (Header) =====
+model JournalEntry {
+  id                 String        @id @default(cuid())
+  entryNumber        String        @unique
+  entryDate          DateTime
+  journalType        String        @default("GENERAL")
+  status             String        @default("POSTED")
+  memo               String?
+  sourceDocumentType String?
+  sourceDocumentId   String?
+  lines              JournalLine[]
+  createdAt          DateTime      @default(now())
+}
+
+// ===== รายการบัญชี (Detail - ขา Dr/Cr) =====
+model JournalLine {
+  id             String         @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry   @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        ChartOfAccount @relation(fields: [accountId], references: [id])
+  debitAmount    Float          @default(0)
+  creditAmount   Float          @default(0)
+  description    String?
+}
+
+// ===== ผู้ติดต่อ (ลูกค้า/คู่ค้า) =====
+model Contact {
+  id         String   @id @default(cuid())
+  name       String
+  taxId      String?
+  branchType String   @default("HEAD")
+  branchCode String   @default("00000")
+  address    String?
+  phone      String?
+  email      String?
+  isCustomer Boolean  @default(true)
+  isVendor   Boolean  @default(false)
+  invoices   Invoice[]
+  expenses   Expense[]
+  whtPayer   WithholdingTax[] @relation("WhtPayer")
+  whtPayee   WithholdingTax[] @relation("WhtPayee")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ===== ใบแจ้งหนี้ / ใบกำกับภาษี =====
+model Invoice {
+  id             String        @id @default(cuid())
+  invoiceNumber  String        @unique
+  invoiceDate    DateTime
+  dueDate        DateTime
+  contactId      String
+  contact        Contact       @relation(fields: [contactId], references: [id])
+  status         String        @default("DRAFT")
+  subtotal       Float         @default(0)
+  vatRate        Float         @default(7)
+  vatAmount      Float         @default(0)
+  whtRate        Float         @default(0)
+  whtAmount      Float         @default(0)
+  totalAmount    Float         @default(0)
+  netAmount      Float         @default(0)
+  vatType        String        @default("EXCLUSIVE")
+  notes          String?
+  items          InvoiceItem[]
+  receipts       Receipt[]
+  taxInvoice     TaxInvoice?
+  journalEntryId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// ===== รายการในใบแจ้งหนี้ =====
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float    @default(0)
+  amount      Float    @default(0)
+}
+
+// ===== ใบเสร็จรับเงิน =====
+model Receipt {
+  id             String   @id @default(cuid())
+  receiptNumber  String   @unique
+  receiptDate    DateTime
+  invoiceId      String?
+  invoice        Invoice? @relation(fields: [invoiceId], references: [id])
+  contactName    String?
+  amount         Float    @default(0)
+  paymentMethod  String   @default("TRANSFER")
+  whtAmount      Float    @default(0)
+  attachmentUrl  String?
+  notes          String?
+  journalEntryId String?
+  createdAt      DateTime @default(now())
+}
+
+// ===== บันทึกค่าใช้จ่าย =====
+model Expense {
+  id             String        @id @default(cuid())
+  expenseNumber  String        @unique
+  expenseDate    DateTime
+  contactId      String?
+  contact        Contact?      @relation(fields: [contactId], references: [id])
+  status         String        @default("RECORDED")
+  category       String?
+  subtotal       Float         @default(0)
+  vatRate        Float         @default(7)
+  vatAmount      Float         @default(0)
+  whtRate        Float         @default(0)
+  whtAmount      Float         @default(0)
+  totalAmount    Float         @default(0)
+  netPayment     Float         @default(0)
+  vatType        String        @default("EXCLUSIVE")
+  paymentMethod  String        @default("TRANSFER")
+  attachmentUrl  String?
+  notes          String?
+  items          ExpenseItem[]
+  journalEntryId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// ===== รายการค่าใช้จ่าย =====
+model ExpenseItem {
+  id          String   @id @default(cuid())
+  expenseId   String
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  accountId   String?
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float    @default(0)
+  amount      Float    @default(0)
+}
+
+// ===== ทะเบียนภาษีซื้อ-ขาย (สำหรับรายงาน ภ.พ.30) =====
+model TaxInvoice {
+  id               String   @id @default(cuid())
+  taxType          String
+  taxInvoiceNumber String
+  taxInvoiceDate   DateTime
+  taxPeriodMonth   Int
+  taxPeriodYear    Int
+  contactName      String
+  contactTaxId     String
+  contactBranch    String   @default("00000")
+  subtotalAmount   Float
+  vatRate          Float    @default(7)
+  vatAmount        Float
+  invoiceId        String?  @unique
+  invoice          Invoice? @relation(fields: [invoiceId], references: [id])
+  createdAt        DateTime @default(now())
+}
+
+// ===== หนังสือรับรองหัก ณ ที่จ่าย (50 ทวิ) =====
+model WithholdingTax {
+  id              String   @id @default(cuid())
+  whtNumber       String   @unique
+  formType        String
+  paymentDate     DateTime
+  payerContactId  String
+  payerContact    Contact  @relation("WhtPayer", fields: [payerContactId], references: [id])
+  payeeContactId  String
+  payeeContact    Contact  @relation("WhtPayee", fields: [payeeContactId], references: [id])
+  incomeCategory  String
+  incomeType      String
+  baseAmount      Float
+  whtRate         Float
+  whtAmount       Float
+  whtCondition    String   @default("1")
+  journalEntryId  String?
+  createdAt       DateTime @default(now())
+}
+
+// ===== สินค้าและบริการ (Inventory / Product Catalog) =====
+model Product {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  name         String
+  unit         String          @default("ชิ้น")
+  sellingPrice Float           @default(0)
+  costPrice    Float           @default(0)
+  currentStock Float           @default(0)
+  reorderPoint Float           @default(5)
+  isActive     Boolean         @default(true)
+  movements    StockMovement[]
+  invoiceItems InvoiceItem[]
+  expenseItems ExpenseItem[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+// ===== การเคลื่อนไหวสต็อกสินค้า (Stock Movement Card) =====
+// type: IN (รับเข้า), OUT (จ่ายออก), ADJUST (ปรับปรุง)
+model StockMovement {
+  id               String   @id @default(cuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type             String
+  quantity         Float
+  unitCost         Float    @default(0)
+  referenceDocType String?
+  referenceDocId   String?
+  movementDate     DateTime @default(now())
+  notes            String?
+}
+
+// ===== สินทรัพย์ถาวร & ค่าเสื่อมราคา (Fixed Assets & Depreciation) =====
+// status: ACTIVE, DISPOSED
+model FixedAsset {
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  name               String
+  category           String
+  purchaseDate       DateTime
+  costValue          Float
+  salvageValue       Float    @default(1)
+  usefulLifeYears    Float    @default(5)
+  accumDepreciation  Float    @default(0)
+  status             String   @default("ACTIVE")
+  lastDeprDate       DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// ===== รายการกระทบยอดธนาคาร (Bank Statement Line) =====
+model BankStatementLine {
+  id            String   @id @default(cuid())
+  bankAccount   String   @default("SCB")
+  transactionDate DateTime
+  description   String
+  amount        Float
+  type          String   // DEBIT (ถอน/จ่าย), CREDIT (ฝาก/รับ)
+  isReconciled  Boolean  @default(false)
+  matchedDocType String?
+  matchedDocId   String?
+  createdAt     DateTime @default(now())
+}
