@@ -228,13 +228,13 @@ export default function ImportReceiptModal({ isOpen, onClose, onSuccess }: Impor
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b flex justify-between items-center bg-slate-900 text-white">
+        <div className="px-4 sm:px-6 py-3.5 border-b flex justify-between items-center bg-slate-900 text-white">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-amber-400" />
-            <h2 className="text-lg font-bold">นำเข้าข้อมูลใบเสร็จรับเงิน (Receipt Importer)</h2>
+            <Sparkles className="w-5 h-5 text-amber-400 flex-shrink-0" />
+            <h2 className="text-sm sm:text-lg font-bold leading-snug">นำเข้าข้อมูลใบเสร็จรับเงิน (Receipt Importer)</h2>
           </div>
           <button onClick={onClose} className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors">
             <X className="w-5 h-5" />
@@ -242,27 +242,27 @@ export default function ImportReceiptModal({ isOpen, onClose, onSuccess }: Impor
         </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b bg-slate-50 px-6 pt-3 gap-2">
+        <div className="flex border-b bg-slate-50 px-3 sm:px-6 pt-3 gap-1.5 overflow-x-auto">
           <button
             onClick={() => setActiveTab('single')}
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-xl transition-all flex items-center gap-2 ${
+            className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-t-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'single'
                 ? 'bg-white text-slate-900 border-t-2 border-primary-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
             }`}
           >
-            <ImageIcon className="w-4 h-4 text-sky-600" />
+            <ImageIcon className="w-4 h-4 text-sky-600 flex-shrink-0" />
             นำเข้าจากสลิป / สแกนไฟล์
           </button>
           <button
             onClick={() => setActiveTab('batch')}
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-xl transition-all flex items-center gap-2 ${
+            className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-t-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'batch'
                 ? 'bg-white text-slate-900 border-t-2 border-primary-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
             }`}
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 flex-shrink-0" />
             นำเข้าหลายรายการ (CSV / Excel / JSON)
           </button>
         </div>

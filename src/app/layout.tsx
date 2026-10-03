@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_Thai } from 'next/font/google';
 import './globals.css';
-import Sidebar from '@/components/layout/Sidebar';
 import { Toaster } from 'sonner';
 
 const notoSansThai = Noto_Sans_Thai({
@@ -16,6 +15,8 @@ export const metadata: Metadata = {
   description: 'ระบบบัญชีครบวงจรสำหรับบริษัท รองรับ VAT, WHT, งบการเงิน',
 };
 
+import AppLayout from '@/components/layout/AppLayout';
+
 export default function RootLayout({
   children,
 }: {
@@ -24,14 +25,7 @@ export default function RootLayout({
   return (
     <html lang="th" className={notoSansThai.variable}>
       <body className={notoSansThai.className}>
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 ml-[260px]">
-            <div className="p-6 max-w-7xl mx-auto">
-              {children}
-            </div>
-          </main>
-        </div>
+        <AppLayout>{children}</AppLayout>
         <Toaster
           position="top-right"
           richColors

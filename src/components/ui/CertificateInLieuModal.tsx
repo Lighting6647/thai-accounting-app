@@ -146,14 +146,14 @@ export default function CertificateInLieuModal({ isOpen, onClose, data }: Certif
             </div>
 
             {/* Items Table (Green Header & Excel Grid Lines) */}
-            <div className="border border-slate-800 mb-2">
-              <table className="w-full text-xs text-left border-collapse">
+            <div className="border border-slate-800 mb-2 overflow-x-auto">
+              <table className="w-full min-w-[500px] text-xs text-left border-collapse">
                 <thead>
                   <tr className="bg-emerald-500 text-slate-950 font-bold border-b border-slate-800 text-center">
-                    <th className="p-2 border-r border-slate-800 w-24">วัน เดือน ปี</th>
+                    <th className="p-2 border-r border-slate-800 w-24 whitespace-nowrap">วัน เดือน ปี</th>
                     <th className="p-2 border-r border-slate-800">รายละเอียด</th>
-                    <th className="p-2 border-r border-slate-800 w-28 text-right">จำนวนเงิน</th>
-                    <th className="p-2 w-24">หมายเหตุ</th>
+                    <th className="p-2 border-r border-slate-800 w-28 text-right whitespace-nowrap">จำนวนเงิน</th>
+                    <th className="p-2 w-24 whitespace-nowrap">หมายเหตุ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -161,7 +161,7 @@ export default function CertificateInLieuModal({ isOpen, onClose, data }: Certif
                     <tr key={idx} className="border-b border-slate-300 text-slate-900 h-8">
                       <td className="p-1.5 text-center border-r border-slate-300 whitespace-nowrap">{item.date}</td>
                       <td className="p-1.5 border-r border-slate-300 font-medium px-3">{item.description}</td>
-                      <td className="p-1.5 text-right border-r border-slate-300 font-mono font-bold px-3">{formatMoney(item.amount)}</td>
+                      <td className="p-1.5 text-right border-r border-slate-300 font-mono font-bold px-3 whitespace-nowrap">{formatMoney(item.amount)}</td>
                       <td className="p-1.5 text-center text-slate-600 px-2">{item.notes}</td>
                     </tr>
                   ))}
@@ -181,7 +181,7 @@ export default function CertificateInLieuModal({ isOpen, onClose, data }: Certif
                     <td colSpan={2} className="p-2 text-center border-r border-slate-800 text-sm">
                       จำนวนเงินรวมทั้งสิ้น
                     </td>
-                    <td className="p-2 text-right border-r border-slate-800 font-mono text-sm px-3 bg-slate-300">
+                    <td className="p-2 text-right border-r border-slate-800 font-mono text-sm px-3 bg-slate-300 whitespace-nowrap">
                       {formatMoney(totalAmount)}
                     </td>
                     <td className="p-2 bg-slate-200"></td>
@@ -198,30 +198,30 @@ export default function CertificateInLieuModal({ isOpen, onClose, data }: Certif
                   type="text"
                   value={claimantName}
                   onChange={(e) => setClaimantName(e.target.value)}
-                  className="font-bold border-b border-slate-400 bg-transparent px-2 text-center min-w-[200px] outline-none print:border-none"
+                  className="font-bold border-b border-slate-400 bg-transparent px-2 text-center min-w-[140px] sm:min-w-[200px] outline-none print:border-none"
                 />
                 <span>(ผู้เบิก) ตำแหน่ง</span>
                 <input
                   type="text"
                   value={position}
                   onChange={(e) => setPosition(e.target.value)}
-                  className="font-semibold border-b border-slate-400 bg-transparent px-2 text-center min-w-[150px] outline-none print:border-none"
+                  className="font-semibold border-b border-slate-400 bg-transparent px-2 text-center min-w-[120px] sm:min-w-[150px] outline-none print:border-none"
                 />
               </div>
 
-              <p className="pl-6">
+              <p className="pl-2 sm:pl-6">
                 ขอรับรองว่า รายจ่ายข้างต้นนี้ไม่อาจเรียกเก็บใบเสร็จรับเงินจากผู้รับได้ และข้าพเจ้าได้จ่ายไปในงานของทาง
               </p>
-              <p className="pl-6 font-semibold">
+              <p className="pl-2 sm:pl-6 font-semibold">
                 {companyInfo.name} โดยแท้
               </p>
             </div>
 
             {/* Bottom Remarks & Signatures Layout (Matching Excel) */}
-            <div className="grid grid-cols-12 gap-2 mt-8 pt-4 text-[11px] text-slate-800">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mt-6 pt-4 text-[11px] text-slate-800">
               
               {/* Left Column: Remarks & Checkboxes */}
-              <div className="col-span-5 space-y-2">
+              <div className="md:col-span-5 space-y-2">
                 <p className="font-bold">หมายเหตุ</p>
                 <p className="font-semibold pl-2">เอกสารแนบใบแทนใบเสร็จรับเงิน</p>
                 <div className="pl-4 space-y-1 text-slate-700">
@@ -237,24 +237,24 @@ export default function CertificateInLieuModal({ isOpen, onClose, data }: Certif
               </div>
 
               {/* Right Column: Signatures */}
-              <div className="col-span-7 space-y-5 text-right font-medium pr-4">
-                <div className="flex items-center justify-end gap-3">
-                  <span>ลงชื่อ</span>
-                  <span className="border-b border-dotted border-slate-400 w-48 inline-block text-center text-slate-400">...................................................</span>
+              <div className="md:col-span-7 space-y-4 text-left md:text-right font-medium md:pr-4">
+                <div className="flex items-center justify-start md:justify-end gap-2 sm:gap-3">
+                  <span className="w-12 text-right">ลงชื่อ</span>
+                  <span className="border-b border-dotted border-slate-400 w-36 sm:w-48 inline-block text-center text-slate-400">...................................................</span>
                   <span className="w-16 text-left">(ผู้รับเงิน)</span>
                 </div>
 
-                <div className="flex items-center justify-end gap-3">
-                  <span>ลงชื่อ</span>
-                  <span className="border-b border-slate-400 font-bold text-slate-900 px-4 min-w-[180px] text-center inline-block">
+                <div className="flex items-center justify-start md:justify-end gap-2 sm:gap-3">
+                  <span className="w-12 text-right">ลงชื่อ</span>
+                  <span className="border-b border-slate-400 font-bold text-slate-900 px-2 sm:px-4 min-w-[140px] sm:min-w-[180px] text-center inline-block">
                     {approverName || claimantName}
                   </span>
                   <span className="w-16 text-left">(ผู้จ่าย)</span>
                 </div>
 
-                <div className="flex items-center justify-end gap-3">
-                  <span>ลงชื่อ</span>
-                  <span className="border-b border-dotted border-slate-400 w-48 inline-block text-center text-slate-400">...................................................</span>
+                <div className="flex items-center justify-start md:justify-end gap-2 sm:gap-3">
+                  <span className="w-12 text-right">ลงชื่อ</span>
+                  <span className="border-b border-dotted border-slate-400 w-36 sm:w-48 inline-block text-center text-slate-400">...................................................</span>
                   <span className="w-16 text-left">(ผู้อนุมัติ)</span>
                 </div>
               </div>

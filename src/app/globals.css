@@ -49,27 +49,27 @@
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-150 active:scale-[0.96] focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none;
   }
 
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 shadow-sm hover:shadow;
+    @apply btn bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800 focus:ring-primary-500 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all;
   }
 
   .btn-secondary {
-    @apply btn bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-primary-500 shadow-sm;
+    @apply btn bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100 focus:ring-primary-500 shadow-sm hover:shadow transition-all;
   }
 
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-sm;
+    @apply btn bg-red-600 text-white hover:bg-red-700 active:bg-red-800 focus:ring-red-500 shadow-sm hover:shadow-md transition-all;
   }
 
   .btn-ghost {
-    @apply btn text-gray-600 hover:bg-gray-100 focus:ring-primary-500;
+    @apply btn text-gray-600 hover:bg-gray-100/80 active:bg-gray-200 focus:ring-primary-500 transition-colors;
   }
 
   .input {
-    @apply block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-500 transition-shadow;
+    @apply block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:bg-gray-50 disabled:text-gray-500 transition-all;
   }
 
   .label {
@@ -85,40 +85,44 @@
   }
 
   .table thead {
-    @apply bg-gray-50 border-b border-gray-200;
+    @apply bg-gray-50/90 border-b border-gray-200 backdrop-blur-sm sticky top-0 z-10;
   }
 
   .table th {
-    @apply px-4 py-3 font-medium text-gray-500 uppercase text-xs tracking-wider;
+    @apply px-4 py-3 font-semibold text-gray-600 uppercase text-xs tracking-wider;
   }
 
   .table td {
-    @apply px-4 py-3 border-b border-gray-100;
+    @apply px-4 py-3 border-b border-gray-100 transition-colors;
+  }
+
+  .table tbody tr {
+    @apply transition-all duration-150;
   }
 
   .table tbody tr:hover {
-    @apply bg-gray-50/80 transition-colors;
+    @apply bg-primary-50/40;
   }
 
   /* Status Badges */
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-transform;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-all duration-150 hover:scale-105;
   }
 
   .badge-draft {
-    @apply badge bg-gray-100 text-gray-700;
+    @apply badge bg-gray-100 text-gray-700 border border-gray-200;
   }
 
   .badge-unpaid {
-    @apply badge bg-amber-100 text-amber-700;
+    @apply badge bg-amber-50 text-amber-700 border border-amber-200/60;
   }
 
   .badge-overdue {
-    @apply badge bg-red-100 text-red-700;
+    @apply badge bg-red-50 text-red-700 border border-red-200/60;
   }
 
   .badge-paid {
-    @apply badge bg-green-100 text-green-700;
+    @apply badge bg-emerald-50 text-emerald-700 border border-emerald-200/60;
   }
 
   .badge-voided {
@@ -126,12 +130,12 @@
   }
 
   .badge-posted {
-    @apply badge bg-blue-100 text-blue-700;
+    @apply badge bg-blue-50 text-blue-700 border border-blue-200/60;
   }
 
   /* Metric Card with GSAP hover interaction */
   .metric-card {
-    @apply card p-6 flex flex-col gap-1 gsap-hover-card cursor-default;
+    @apply card p-6 flex flex-col gap-1 gsap-hover-card cursor-default select-none;
   }
 
   .metric-card .metric-label {
@@ -139,7 +143,7 @@
   }
 
   .metric-card .metric-value {
-    @apply text-2xl font-bold text-gray-900;
+    @apply text-2xl font-bold text-gray-900 tracking-tight;
   }
 
   .metric-card .metric-sub {
@@ -147,25 +151,33 @@
   }
 }
 
+/* Glassmorphism Classes */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 /* GSAP Micro-Interactions & Hover Animations */
 .gsap-hover-card {
-  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .gsap-hover-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 14px 28px -6px rgba(0, 0, 0, 0.08), 0 8px 16px -4px rgba(0, 0, 0, 0.04);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.06), 0 4px 12px -2px rgba(0, 0, 0, 0.03);
   border-color: rgba(59, 130, 246, 0.3);
 }
 
 .gsap-pulse-icon {
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .gsap-hover-card:hover .gsap-pulse-icon {
-  transform: scale(1.15) rotate(6deg);
+  transform: scale(1.15) rotate(4deg);
 }
 
 .gsap-spin-hover {
-  transition: transform 0.4s ease;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .gsap-spin-hover:hover {
   transform: rotate(180deg);
@@ -173,20 +185,20 @@
 
 /* GSAP Button Press & Glow Effects */
 .btn-gsap-press {
-  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, filter 0.2s ease;
 }
 .btn-gsap-press:active {
   transform: scale(0.96);
 }
 .btn-gsap-press:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.04);
 }
 
 /* GSAP Modal Slide & Scale Entrance */
 @keyframes gsapModalEnter {
   0% {
     opacity: 0;
-    transform: scale(0.94) translateY(12px);
+    transform: scale(0.95) translateY(8px);
   }
   100% {
     opacity: 1;
@@ -195,7 +207,7 @@
 }
 
 .gsap-modal-card {
-  animation: gsapModalEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: gsapModalEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* GSAP Shimmer Skeleton Loading */
@@ -212,6 +224,15 @@
   background: linear-gradient(90deg, rgba(243, 244, 246, 0.8) 25%, rgba(229, 231, 235, 0.9) 50%, rgba(243, 244, 246, 0.8) 75%);
   background-size: 200% 100%;
   animation: gsapShimmerSweep 1.5s infinite;
+}
+
+/* Accessibility: Reduced Motion Guard */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
 }
 
 /* Print Styles */

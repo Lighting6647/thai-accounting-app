@@ -63,7 +63,7 @@ export default function DashboardPage() {
     <div ref={containerRef} className="space-y-6">
       <h1 className="text-2xl font-bold">ภาพรวม (Dashboard)</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="metric-card gsap-card">
           <div className="flex justify-between items-start">
             <div>
@@ -126,10 +126,10 @@ export default function DashboardPage() {
       </div>
 
       <div className="card gsap-card">
-        <div className="card-header border-b px-6 py-4">
+        <div className="card-header border-b px-4 sm:px-6 py-4">
           <h2 className="text-lg font-medium">รายได้และค่าใช้จ่าย 6 เดือนล่าสุด</h2>
         </div>
-        <div className="card-body p-6 h-80">
+        <div className="card-body p-3 sm:p-6 h-80">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyChart}>
               <XAxis dataKey="month" />
@@ -145,13 +145,13 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card gsap-card">
-          <div className="card-header border-b px-6 py-4 flex justify-between items-center">
+          <div className="card-header border-b px-4 sm:px-6 py-4 flex justify-between items-center">
             <h2 className="text-lg font-medium">ใบแจ้งหนี้ล่าสุด</h2>
             <Link href="/income/invoices" className="text-sm text-blue-600 hover:underline">
               ดูทั้งหมด
             </Link>
           </div>
-          <div className="card-body p-0">
+          <div className="card-body p-0 overflow-x-auto">
             <table className="table w-full">
               <thead>
                 <tr className="bg-gray-50 text-left text-sm text-gray-500">
@@ -191,13 +191,13 @@ export default function DashboardPage() {
         </div>
 
         <div className="card gsap-card">
-          <div className="card-header border-b px-6 py-4 flex justify-between items-center">
+          <div className="card-header border-b px-4 sm:px-6 py-4 flex justify-between items-center">
             <h2 className="text-lg font-medium">ค่าใช้จ่ายล่าสุด</h2>
             <Link href="/expenses" className="text-sm text-blue-600 hover:underline">
               ดูทั้งหมด
             </Link>
           </div>
-          <div className="card-body p-0">
+          <div className="card-body p-0 overflow-x-auto">
             <table className="table w-full">
               <thead>
                 <tr className="bg-gray-50 text-left text-sm text-gray-500">
