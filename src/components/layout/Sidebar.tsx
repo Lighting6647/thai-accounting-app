@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -20,6 +21,8 @@ import {
   Building,
   CreditCard,
   X,
+  LogOut,
+  UserCheck,
 } from 'lucide-react';
 
 const navigation = [
@@ -53,6 +56,16 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const [user, setUser] = useState<{ name: string; role: string; username: string } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.user) setUser(d.user);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <>
@@ -127,9 +140,28 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-100 flex-shrink-0 bg-gray-50/50">
-          <p className="text-xs text-gray-400 font-medium">v1.2.0 • Full Pro Suite</p>
+        {/* Active Role & User Footer */}
+        <div className="px-3.5 py-3 border-t border-gray-100 flex-shrink-0 bg-gray-50/80 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div className="w-8 h-8 rounded-xl bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-xs flex-shrink-0 border border-primary-200">
+              {user?.name?.[0] || 'A'}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-gray-900 truncate leading-snug">{user?.name || 'ผู้ดูแลระบบ'}</p>
+              <span className="inline-block text-[10px] font-bold text-primary-700 bg-primary-100/80 px-1.5 py-0.2 rounded border border-primary-200">
+                {user?.role || 'ADMIN'}
+              </span>
+            </div>
+          </div>
+
+          <Link
+            href="/login"
+            onClick={onClose}
+            className="p-2 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-white border border-gray-200 shadow-2xs transition-all active:scale-95 flex items-center justify-center flex-shrink-0"
+            title="สลับสิทธิ์ผู้ใช้งาน / เข้าสู่ระบบ"
+          >
+            <LogOut className="w-4 h-4 text-gray-600" />
+          </Link>
         </div>
       </aside>
     </>

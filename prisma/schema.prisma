@@ -282,3 +282,16 @@ model BankStatementLine {
   matchedDocId   String?
   createdAt     DateTime @default(now())
 }
+
+// ===== ผู้ใช้งานและสิทธิ์เข้าถึงระบบ (Users & Roles) =====
+// roles: ADMIN (ผู้ดูแลระบบ), MANAGER (ผู้จัดการ), ACCOUNTANT (นักบัญชี), VIEWER (ผู้เข้าชม)
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  name      String
+  password  String
+  role      String   @default("ACCOUNTANT")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
