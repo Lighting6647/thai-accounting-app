@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     taxId: '',
@@ -16,17 +17,30 @@ export default function SettingsPage() {
     email: ''
   })
 
+  const fetchCompanyData = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/company')
+      if (res.ok) {
+        const data = await res.json()
+        setFormData({
+          name: data.name || '',
+          taxId: data.taxId || '',
+          branch: data.branchCode || 'สำนักงานใหญ่',
+          address: data.address || '',
+          phone: data.phone || '',
+          email: data.email || ''
+        })
+      }
+    } catch (err) {
+      console.error('Failed to fetch company settings:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    // In a real app, fetch from API. Hardcoded seed data for now.
-    setFormData({
-      name: 'บริษัท ตัวอย่าง จำกัด',
-      taxId: '0105566778899',
-      branch: 'สำนักงานใหญ่',
-      address: '123 ถนนสุขุมวิท แขวงคลองเตยเหนือ เขตวัฒนา กรุงเทพมหานคร 10110',
-      phone: '02-123-4567',
-      email: 'contact@example.co.th'
-    })
-    setLoading(false)
+    fetchCompanyData()
   }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -34,13 +48,36 @@ export default function SettingsPage() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Simulate API call
-    setTimeout(() => {
-      toast.success('บันทึกข้อมูลบริษัทสำเร็จ')
-      setIsEditing(false)
-    }, 500)
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          taxId: formData.taxId,
+          branchCode: formData.branch,
+          address: formData.address,
+          phone: formData.phone,
+          email: formData.email
+        })
+      })
+
+      if (res.ok) {
+        toast.success('บันทึกข้อมูลบริษัทสำเร็จ')
+        setIsEditing(false)
+        fetchCompanyData()
+      } else {
+        const errorData = await res.json()
+        toast.error(errorData.error || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล')
+      }
+    } catch (err: any) {
+      toast.error('ไม่สามารถติดต่อเซิร์ฟเวอร์ได้')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -200,9 +237,10 @@ export default function SettingsPage() {
                   </button>
                   <button 
                     type="submit" 
-                    className="btn-primary flex items-center gap-2"
+                    disabled={submitting}
+                    className="btn-primary flex items-center gap-2 disabled:opacity-50"
                   >
-                    <Save className="w-4 h-4" /> บันทึกข้อมูล
+                    <Save className="w-4 h-4" /> {submitting ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
                   </button>
                 </div>
               )}
