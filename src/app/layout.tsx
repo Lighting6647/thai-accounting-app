@@ -16,6 +16,7 @@ export const metadata: Metadata = {
 };
 
 import AppLayout from '@/components/layout/AppLayout';
+import KeepAlive from '@/components/KeepAlive';
 
 export default function RootLayout({
   children,
@@ -25,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang="th" className={notoSansThai.variable}>
       <body className={notoSansThai.className}>
+        <KeepAlive />
         <AppLayout>{children}</AppLayout>
         <Toaster
           position="top-right"
