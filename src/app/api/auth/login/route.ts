@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import crypto from 'crypto';
 
 export async function POST(request: Request) {
   try {
@@ -17,8 +18,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' }, { status: 401 });
     }
 
-    // Direct password match check (support seeded plain text / hashes)
-    if (user.password !== password.trim()) {
+    // Support both cryptographic SHA-256 hash and legacy plain text fallback
+    const inputHash = crypto.createHash('sha256').update(password.trim()).digest('hex');
+    const isPasswordValid = user.password === password.trim() || user.password === inputHash;
+    if (!isPasswordValid) {
       return NextResponse.json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' }, { status: 401 });
     }
 
