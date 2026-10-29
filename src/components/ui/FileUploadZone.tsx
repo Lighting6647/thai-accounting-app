@@ -15,7 +15,7 @@ export default function FileUploadZone({ value, onChange, label = 'แนบเ�
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isPdf = value?.toLowerCase().endsWith('.pdf');
+  const isPdf = value?.toLowerCase().endsWith('.pdf') || value?.startsWith('data:application/pdf');
   const isImage = value && !isPdf;
 
   const handleFileChange = async (file: File) => {
@@ -72,7 +72,7 @@ export default function FileUploadZone({ value, onChange, label = 'แนบเ�
               )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-slate-800">
-                  {value.split('/').pop()}
+                  {value.startsWith('data:') ? 'เอกสารแนบ' : value.split('/').pop()}
                 </p>
                 <p className="text-xs text-slate-500">
                   {isPdf ? 'เอกสาร PDF' : 'ไฟล์รูปภาพ'}

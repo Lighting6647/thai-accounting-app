@@ -42,27 +42,43 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Save to public/uploads
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadDir, { recursive: true });
+    try {
+      // Save to public/uploads (local dev / persistent storage)
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+      await mkdir(uploadDir, { recursive: true });
 
-    const ext = path.extname(file.name) || (file.type === 'application/pdf' ? '.pdf' : '.jpg');
-    const sanitizedExt = ext.toLowerCase().replace(/[^a-z0-9.]/g, '');
-    const filename = `receipt-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${sanitizedExt}`;
-    const filePath = path.join(uploadDir, filename);
+      const ext = path.extname(file.name) || (file.type === 'application/pdf' ? '.pdf' : '.jpg');
+      const sanitizedExt = ext.toLowerCase().replace(/[^a-z0-9.]/g, '');
+      const filename = `receipt-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${sanitizedExt}`;
+      const filePath = path.join(uploadDir, filename);
 
-    await writeFile(filePath, buffer);
+      await writeFile(filePath, buffer);
 
-    const publicUrl = `/uploads/${filename}`;
+      const publicUrl = `/uploads/${filename}`;
 
-    return NextResponse.json({
-      success: true,
-      url: publicUrl,
-      filename,
-      originalName: file.name,
-      size: file.size,
-      mimeType: file.type,
-    });
+      return NextResponse.json({
+        success: true,
+        url: publicUrl,
+        filename,
+        originalName: file.name,
+        size: file.size,
+        mimeType: file.type,
+      });
+    } catch (fsError: any) {
+      // Fallback for serverless/read-only filesystem environments (e.g. Vercel)
+      console.warn('Filesystem write failed, falling back to Data URL:', fsError?.message);
+      const base64 = buffer.toString('base64');
+      const dataUrl = `data:${file.type};base64,${base64}`;
+
+      return NextResponse.json({
+        success: true,
+        url: dataUrl,
+        filename: file.name,
+        originalName: file.name,
+        size: file.size,
+        mimeType: file.type,
+      });
+    }
   } catch (error: any) {
     console.error('Error uploading file:', error);
     return NextResponse.json(
