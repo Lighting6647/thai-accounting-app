@@ -1,6 +1,7 @@
 import fs from 'node:fs';
-import path from 'node:path';
+import zlib from 'node:zlib';
 import { PrismaClient } from '@prisma/client';
+import { SQLITE_TEMPLATE_GZ_B64 } from './sqlite-template-data';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
@@ -13,23 +14,18 @@ function createPrismaClient(): PrismaClient {
   if (isServerless && !isPostgres) {
     const tmpDbPath = '/tmp/accounting.sqlite';
     try {
-      if (!fs.existsSync(tmpDbPath)) {
-        const candidates = [
-          path.join(process.cwd(), 'prisma', 'template.sqlite'),
-          path.join(process.cwd(), 'prisma', 'dev.db'),
-        ];
-        const sourceDb = candidates.find((p) => fs.existsSync(p));
-        if (sourceDb) {
-          fs.copyFileSync(sourceDb, tmpDbPath);
-          try {
-            fs.chmodSync(tmpDbPath, 0o666);
-          } catch {
-            // Ignore chmod errors if platform disallows
-          }
+      const needsInit = !fs.existsSync(tmpDbPath) || fs.statSync(tmpDbPath).size < 16384;
+      if (needsInit) {
+        const dbBuffer = zlib.gunzipSync(Buffer.from(SQLITE_TEMPLATE_GZ_B64, 'base64'));
+        fs.writeFileSync(tmpDbPath, dbBuffer);
+        try {
+          fs.chmodSync(tmpDbPath, 0o666);
+        } catch {
+          // Ignore chmod errors if platform disallows
         }
       }
     } catch (err) {
-      console.error('Failed to prepare /tmp/accounting.sqlite:', err);
+      console.error('Failed to initialize /tmp/accounting.sqlite:', err);
     }
 
     return new PrismaClient({

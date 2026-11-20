@@ -1,11 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { execFileSync } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
 const envPath = path.join(projectRoot, '.env');
 const devDbPath = path.join(projectRoot, 'prisma', 'dev.db');
-const templatePath = path.join(projectRoot, 'prisma', 'template.sqlite');
+const templateDataPath = path.join(projectRoot, 'src', 'lib', 'sqlite-template-data.ts');
 
 let databaseUrl = (process.env.DATABASE_URL || '').trim();
 if (!databaseUrl && fs.existsSync(envPath)) {
@@ -32,30 +33,22 @@ function runNpx(args, extraEnv = {}) {
 if (isPostgres) {
   console.log('PostgreSQL detected: running prisma db push --skip-generate...');
   runNpx(['prisma', 'db', 'push', '--skip-generate']);
-  if (!fs.existsSync(templatePath)) {
-    fs.writeFileSync(templatePath, '');
-  }
   console.log('PostgreSQL schema synced.');
   process.exit(0);
 }
 
-// SQLite mode
+// Local SQLite mode: keep sqlite-template-data.ts synced when dev.db is present
 if (fs.existsSync(devDbPath)) {
-  fs.copyFileSync(devDbPath, templatePath);
-  console.log('Copied prisma/dev.db to prisma/template.sqlite for tracing.');
+  const b64 = zlib.gzipSync(fs.readFileSync(devDbPath), { level: 9 }).toString('base64');
+  const content = `// Auto-generated gzipped SQLite bootstrap for Vercel Serverless\nexport const SQLITE_TEMPLATE_GZ_B64 =\n  '${b64}';\n`;
+  const prev = fs.existsSync(templateDataPath) ? fs.readFileSync(templateDataPath, 'utf8') : '';
+  if (prev !== content) {
+    fs.writeFileSync(templateDataPath, content, 'utf8');
+    console.log('Updated src/lib/sqlite-template-data.ts from prisma/dev.db.');
+  } else {
+    console.log('src/lib/sqlite-template-data.ts is already up to date.');
+  }
   process.exit(0);
 }
 
-console.log('No local dev.db found: building fresh seeded prisma/template.sqlite...');
-if (fs.existsSync(templatePath)) {
-  fs.unlinkSync(templatePath);
-}
-
-const templateUrl = 'file:./template.sqlite?connection_limit=1&socket_timeout=15';
-runNpx(['prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'], {
-  DATABASE_URL: templateUrl,
-});
-runNpx(['tsx', 'prisma/seed.ts'], { DATABASE_URL: templateUrl });
-runNpx(['tsx', 'prisma/seed-users.ts'], { DATABASE_URL: templateUrl });
-runNpx(['tsx', 'prisma/seed-express-erp.ts'], { DATABASE_URL: templateUrl });
-console.log('Built and seeded prisma/template.sqlite successfully.');
+console.log('SQLite serverless build: using committed src/lib/sqlite-template-data.ts.');
