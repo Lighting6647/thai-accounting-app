@@ -36,5 +36,7 @@ next-env.d.ts
 # SQLite DB & Uploaded receipts
 prisma/dev.db
 prisma/dev.db-journal
+prisma/template.sqlite
+prisma/template.sqlite-journal
 public/uploads/*
 !public/uploads/.gitkeep

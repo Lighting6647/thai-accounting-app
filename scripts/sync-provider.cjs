@@ -5,7 +5,7 @@ const projectRoot = path.resolve(__dirname, '..');
 const envPath = path.join(projectRoot, '.env');
 const schemaPath = path.join(projectRoot, 'prisma', 'schema.prisma');
 
-let databaseUrl = process.env.DATABASE_URL || '';
+let databaseUrl = (process.env.DATABASE_URL || '').trim();
 
 if (!databaseUrl && fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
@@ -20,16 +20,17 @@ if (!fs.existsSync(schemaPath)) {
   process.exit(1);
 }
 
-let targetProvider = null;
-if (databaseUrl.startsWith('file:')) {
-  targetProvider = 'sqlite';
-} else if (databaseUrl.startsWith('postgres://') || databaseUrl.startsWith('postgresql://')) {
-  targetProvider = 'postgresql';
-}
+const isPostgres =
+  databaseUrl.startsWith('postgres://') || databaseUrl.startsWith('postgresql://');
+const targetProvider = isPostgres ? 'postgresql' : 'sqlite';
 
-if (!targetProvider) {
-  console.log('DATABASE_URL protocol not recognized or missing; keeping existing provider.');
-  process.exit(0);
+if (!databaseUrl && !fs.existsSync(envPath)) {
+  fs.writeFileSync(
+    envPath,
+    'DATABASE_URL="file:./dev.db?connection_limit=1&socket_timeout=15"\n',
+    'utf8'
+  );
+  console.log('Created fallback .env for SQLite Prisma generation.');
 }
 
 const schema = fs.readFileSync(schemaPath, 'utf8');

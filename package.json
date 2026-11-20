@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/sync-provider.cjs && next dev",
-    "build": "node scripts/sync-provider.cjs && prisma generate && next build",
+    "build": "node scripts/sync-provider.cjs && prisma generate && node scripts/prepare-build-db.cjs && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "node scripts/sync-provider.cjs && prisma generate",
