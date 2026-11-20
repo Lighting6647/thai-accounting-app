@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { roundMoney } from '@/lib/tax-engine';
+import { calculateMovingAverage, roundMoney } from '@/lib/tax-engine';
+import { ensureDefaultWarehouse, upsertWarehouseStockDelta } from '@/lib/erp-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,9 +22,13 @@ export async function GET(request: Request) {
       where,
       orderBy: { code: 'asc' },
       include: {
+        warehouseStocks: {
+          include: { warehouse: true },
+        },
         movements: {
-          take: 5,
+          take: 25,
           orderBy: { movementDate: 'desc' },
+          include: { warehouse: true },
         },
       },
     });
@@ -38,7 +43,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { code, name, unit, sellingPrice, costPrice, initialStock, reorderPoint } = body;
+    const { code, name, unit, sellingPrice, costPrice, initialStock, reorderPoint, warehouseId } = body;
 
     if (!code || !name) {
       return NextResponse.json({ error: 'กรุณาระบุรหัสและชื่อสินค้า' }, { status: 400 });
@@ -53,6 +58,10 @@ export async function POST(request: Request) {
     const cost = Number(costPrice) || 0;
 
     const product = await prisma.$transaction(async (tx) => {
+      const targetWh = warehouseId
+        ? await tx.warehouse.findUnique({ where: { id: warehouseId } })
+        : await ensureDefaultWarehouse(tx);
+
       const p = await tx.product.create({
         data: {
           code,
@@ -65,13 +74,17 @@ export async function POST(request: Request) {
         },
       });
 
-      if (initQty > 0) {
+      if (targetWh && initQty > 0) {
+        await upsertWarehouseStockDelta(tx, targetWh.id, p.id, initQty);
         await tx.stockMovement.create({
           data: {
             productId: p.id,
+            warehouseId: targetWh.id,
             type: 'IN',
             quantity: initQty,
             unitCost: cost,
+            balanceAfter: initQty,
+            avgCostAfter: cost,
             referenceDocType: 'INITIAL',
             notes: 'ยอดยกมาเริ่มต้น',
           },
@@ -88,13 +101,13 @@ export async function POST(request: Request) {
   }
 }
 
-// ปรับปรุงสต็อกสินค้า (Adjust Stock)
+// ปรับปรุงสต็อกสินค้า (Adjust Stock) พร้อมอัปเดตคลังและ Moving Average
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { productId, type, quantity, unitCost, notes } = body;
+    const { productId, warehouseId, type, quantity, unitCost, notes } = body;
 
-    if (!productId || !type || !quantity) {
+    if (!productId || !type || quantity === undefined) {
       return NextResponse.json({ error: 'ข้อมูลไม่ครบถ้วน' }, { status: 400 });
     }
 
@@ -104,23 +117,46 @@ export async function PATCH(request: Request) {
     }
 
     const qty = Number(quantity);
-    let newStock = product.currentStock;
-
-    if (type === 'IN') {
-      newStock += qty;
-    } else if (type === 'OUT') {
-      newStock -= qty;
-    } else if (type === 'ADJUST') {
-      newStock = qty;
-    }
+    const inputCost = Number(unitCost) > 0 ? Number(unitCost) : product.costPrice;
 
     const updated = await prisma.$transaction(async (tx) => {
+      const targetWh = warehouseId
+        ? await tx.warehouse.findUnique({ where: { id: warehouseId } })
+        : await ensureDefaultWarehouse(tx);
+
+      let newStock = product.currentStock;
+      let newAvgCost = product.costPrice;
+      let delta = 0;
+
+      if (type === 'IN') {
+        const avgRes = calculateMovingAverage(product.currentStock, product.costPrice, qty, inputCost);
+        newStock = avgRes.newStock;
+        newAvgCost = avgRes.newAvgCost;
+        delta = qty;
+      } else if (type === 'OUT') {
+        if (product.currentStock < qty) {
+          throw new Error(`สินค้าคงเหลือไม่พอ (คงเหลือ ${product.currentStock} ${product.unit})`);
+        }
+        newStock = roundMoney(product.currentStock - qty);
+        delta = -qty;
+      } else if (type === 'ADJUST') {
+        delta = roundMoney(qty - product.currentStock);
+        newStock = roundMoney(qty);
+      }
+
+      if (targetWh) {
+        await upsertWarehouseStockDelta(tx, targetWh.id, productId, delta);
+      }
+
       await tx.stockMovement.create({
         data: {
           productId,
+          warehouseId: targetWh?.id || null,
           type,
           quantity: qty,
-          unitCost: Number(unitCost) || product.costPrice,
+          unitCost: inputCost,
+          balanceAfter: newStock,
+          avgCostAfter: newAvgCost,
           referenceDocType: 'MANUAL_ADJUST',
           notes: notes || 'ปรับปรุงสต็อก',
         },
@@ -128,13 +164,16 @@ export async function PATCH(request: Request) {
 
       return tx.product.update({
         where: { id: productId },
-        data: { currentStock: roundMoney(newStock) },
+        data: {
+          currentStock: roundMoney(newStock),
+          costPrice: roundMoney(newAvgCost),
+        },
       });
     });
 
     return NextResponse.json(updated);
   } catch (error: any) {
     console.error('Stock Adjust Error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 400 });
   }
 }

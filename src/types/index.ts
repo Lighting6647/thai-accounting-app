@@ -14,13 +14,61 @@ export type TaxInvoiceType = 'SALES_TAX' | 'PURCHASE_TAX';
 export type PndFormType = 'PND3' | 'PND53';
 export type WhtCondition = '1' | '2' | '3';
 
-// ===== Dashboard =====
+// ===== Dashboard & Express ERP =====
+export interface AgingBucketSummary {
+  current: number;
+  days1to30: number;
+  days31to60: number;
+  over60: number;
+  total: number;
+  count: number;
+}
+
+export interface AgingDocItem {
+  id: string;
+  docNumber: string;
+  docDate: string;
+  dueDate: string;
+  contactName: string;
+  netAmount: number;
+  daysOverdue: number;
+  bucket: 'ยังไม่ครบกำหนด' | '1-30 วัน' | '31-60 วัน' | 'เกิน 60 วัน';
+}
+
+export interface LowStockItem {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  reorderPoint: number;
+  costPrice: number;
+}
+
+export interface ExpressWorkflowSummary {
+  poPendingCount: number;
+  rrUnpaidCount: number;
+  pvPaidCount: number;
+  qtPendingCount: number;
+  soPendingCount: number;
+  ivUnpaidCount: number;
+  rePaidCount: number;
+  warehouseCount: number;
+}
+
 export interface DashboardData {
   revenue: number;
   expenses: number;
   profit: number;
   vatPayable: number;     // ภาษีขาย - ภาษีซื้อ
   overdueCount: number;
+  inventoryValuation?: number;
+  arAging?: AgingBucketSummary;
+  apAging?: AgingBucketSummary;
+  arAgingDocs?: AgingDocItem[];
+  apAgingDocs?: AgingDocItem[];
+  lowStockProducts?: LowStockItem[];
+  expressWorkflow?: ExpressWorkflowSummary;
   recentInvoices: InvoiceListItem[];
   recentExpenses: ExpenseListItem[];
   monthlyChart: MonthlyChartData[];
@@ -93,12 +141,15 @@ export interface InvoiceListItem {
   status: InvoiceStatus;
   totalAmount: number;
   netAmount: number;
+  soId?: string | null;
 }
 
 export interface InvoiceItemInput {
+  productId?: string | null;
   description: string;
   quantity: number;
   unitPrice: number;
+  discount?: number;
   amount: number;
 }
 
@@ -106,6 +157,9 @@ export interface CreateInvoiceInput {
   invoiceDate: string;
   dueDate: string;
   contactId: string;
+  soId?: string | null;
+  warehouseId?: string | null;
+  discountAmount?: number;
   vatType: VatType;
   vatRate: number;
   whtRate: number;

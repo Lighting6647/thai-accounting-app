@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { X, Printer, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
 import { formatMoney, formatDateThai, getStatusLabel, getVatTypeLabel } from '@/lib/format';
 import { toast } from 'sonner';
@@ -99,9 +100,19 @@ export default function DocumentDetailModal({ type, id, onClose, onStatusChanged
               >
                 <FileText className="w-4 h-4 text-amber-600" /> ใบรับรองแทนใบเสร็จ
               </button>
-              <button onClick={handlePrint} className="btn-secondary text-sm px-3 py-1.5 flex items-center gap-1">
-                <Printer className="w-4 h-4" /> พิมพ์
-              </button>
+              {type === 'invoice' ? (
+                <Link
+                  href={`/print/iv/${id}`}
+                  target="_blank"
+                  className="btn-secondary text-sm px-3 py-1.5 flex items-center gap-1"
+                >
+                  <Printer className="w-4 h-4" /> พิมพ์ฟอร์มไทย
+                </Link>
+              ) : (
+                <button onClick={handlePrint} className="btn-secondary text-sm px-3 py-1.5 flex items-center gap-1">
+                  <Printer className="w-4 h-4" /> พิมพ์
+                </button>
+              )}
               <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
                 <X className="w-5 h-5" />
               </button>

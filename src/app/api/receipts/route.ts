@@ -2,10 +2,34 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { generateDocNumber } from '@/lib/doc-number';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
     const search = searchParams.get('search');
+
+    if (id) {
+      const receipt = await prisma.receipt.findUnique({
+        where: { id },
+        include: {
+          invoice: {
+            include: { contact: true, items: true },
+          },
+        },
+      });
+      if (!receipt) {
+        return NextResponse.json({ error: 'ไม่พบใบเสร็จรับเงิน' }, { status: 404 });
+      }
+      const journalEntry = receipt.journalEntryId
+        ? await prisma.journalEntry.findUnique({
+            where: { id: receipt.journalEntryId },
+            include: { lines: { include: { account: true } } },
+          })
+        : null;
+      return NextResponse.json({ ...receipt, journalEntry });
+    }
 
     const where: any = {};
     if (search) {

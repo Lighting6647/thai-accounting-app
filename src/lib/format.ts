@@ -59,13 +59,17 @@ export function formatDateShort(date: Date | string | null | undefined): string 
  */
 export function getStatusLabel(status: string): { label: string; className: string } {
   const statusMap: Record<string, { label: string; className: string }> = {
-    DRAFT:    { label: 'ร่าง',        className: 'badge-draft' },
-    UNPAID:   { label: 'รอชำระ',      className: 'badge-unpaid' },
-    OVERDUE:  { label: 'เกินกำหนด',   className: 'badge-overdue' },
-    PAID:     { label: 'ชำระแล้ว',    className: 'badge-paid' },
-    VOIDED:   { label: 'ยกเลิก',      className: 'badge-voided' },
-    POSTED:   { label: 'บันทึกแล้ว',  className: 'badge-posted' },
-    RECORDED: { label: 'บันทึกแล้ว',  className: 'badge-posted' },
+    DRAFT:    { label: 'ร่าง',           className: 'badge-draft' },
+    APPROVED: { label: 'อนุมัติแล้ว',     className: 'badge-posted' },
+    RECEIVED: { label: 'รับสินค้าแล้ว',   className: 'badge-paid' },
+    ORDERED:  { label: 'สั่งขายแล้ว',    className: 'badge-posted' },
+    INVOICED: { label: 'ออกบิลแล้ว',     className: 'badge-paid' },
+    UNPAID:   { label: 'รอชำระ',         className: 'badge-unpaid' },
+    OVERDUE:  { label: 'เกินกำหนด',      className: 'badge-overdue' },
+    PAID:     { label: 'ชำระแล้ว',       className: 'badge-paid' },
+    VOIDED:   { label: 'ยกเลิก',         className: 'badge-voided' },
+    POSTED:   { label: 'บันทึกแล้ว',     className: 'badge-posted' },
+    RECORDED: { label: 'บันทึกแล้ว',     className: 'badge-posted' },
   };
   return statusMap[status] || { label: status, className: 'badge-draft' };
 }

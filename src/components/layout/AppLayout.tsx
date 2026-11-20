@@ -1,11 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import { Menu, Calculator } from 'lucide-react';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const pathname = usePathname();
+
+  if (pathname?.startsWith('/print/')) {
+    return <div className="min-h-screen bg-white">{children}</div>;
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50 flex-col lg:flex-row">

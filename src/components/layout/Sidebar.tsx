@@ -22,30 +22,39 @@ import {
   CreditCard,
   X,
   LogOut,
-  UserCheck,
+  ShoppingCart,
+  PackageCheck,
+  Banknote,
+  FileSignature,
+  ClipboardCheck,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'ผังบัญชี', href: '/accounts', icon: BookOpen },
-  { name: 'สมุดรายวัน', href: '/journals', icon: FileText },
-  { name: 'ผู้ติดต่อ', href: '/contacts', icon: Users },
-  { section: 'รายรับ & สต็อก' },
-  { name: 'ใบแจ้งหนี้', href: '/income/invoices', icon: Receipt },
-  { name: 'ใบเสร็จรับเงิน', href: '/income/receipts', icon: FileCheck },
-  { name: 'สินค้าคงคลัง', href: '/products', icon: Package },
-  { section: 'รายจ่าย & สินทรัพย์' },
-  { name: 'ค่าใช้จ่าย', href: '/expenses', icon: Wallet },
+  { section: '1. ซื้อ และเจ้าหนี้ (AP)' },
+  { name: 'ใบสั่งซื้อ (PO)', href: '/ap/purchase-orders', icon: ShoppingCart },
+  { name: 'รับสินค้า/ซื้อเชื่อ (RR)', href: '/ap/goods-receipts', icon: PackageCheck },
+  { name: 'ใบสำคัญจ่ายหนี้ (PV)', href: '/ap/payment-vouchers', icon: Banknote },
+  { name: 'บันทึกค่าใช้จ่าย', href: '/expenses', icon: Wallet },
+  { section: '2. ขาย และลูกหนี้ (AR)' },
+  { name: 'ใบเสนอราคา (QT)', href: '/ar/quotations', icon: FileSignature },
+  { name: 'ใบสั่งขาย (SO)', href: '/ar/sales-orders', icon: ClipboardCheck },
+  { name: 'ใบแจ้งหนี้ / ขายเชื่อ (IV)', href: '/income/invoices', icon: Receipt },
+  { name: 'ใบเสร็จรับเงิน (RE)', href: '/income/receipts', icon: FileCheck },
+  { section: '3. สินค้าคงคลัง & ทะเบียน' },
+  { name: 'คลังสินค้า & Stock Card', href: '/products', icon: Package },
+  { name: 'ผู้ติดต่อ (ลูกค้า/คู่ค้า)', href: '/contacts', icon: Users },
   { name: 'สินทรัพย์ถาวร', href: '/assets', icon: Building },
-  { section: 'ภาษี & การเงิน' },
-  { name: 'ภาษีซื้อ-ขาย (VAT)', href: '/tax/vat', icon: Calculator },
+  { section: '4. บัญชี (GL) & ภาษี' },
+  { name: 'ผังบัญชี 5 หมวด', href: '/accounts', icon: BookOpen },
+  { name: 'สมุดรายวัน (Auto-GL)', href: '/journals', icon: FileText },
+  { name: 'ภาษีซื้อ-ขาย (ภ.พ.30)', href: '/tax/vat', icon: Calculator },
   { name: 'หัก ณ ที่จ่าย (WHT)', href: '/tax/wht', icon: FileSpreadsheet },
   { name: 'กระทบยอดธนาคาร', href: '/bank-reconcile', icon: CreditCard },
-  { section: 'รายงาน' },
+  { section: '5. รายงาน & ตั้งค่า' },
   { name: 'งบทดลอง', href: '/reports/trial-balance', icon: BarChart3 },
   { name: 'งบกำไรขาดทุน', href: '/reports/income-statement', icon: TrendingUp },
   { name: 'งบแสดงฐานะการเงิน', href: '/reports/balance-sheet', icon: Scale },
-  { section: 'ตั้งค่า' },
   { name: 'ตั้งค่าบริษัท', href: '/settings', icon: Settings },
 ];
 
@@ -91,11 +100,10 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               <Calculator className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-gray-900 leading-tight">ระบบบัญชี</h1>
-              <p className="text-xs text-gray-400">Accounting System</p>
+              <h1 className="text-base font-bold text-gray-900 leading-tight">ระบบบัญชี ERP</h1>
+              <p className="text-xs text-gray-400">Express Web Standard</p>
             </div>
           </div>
-          {/* Close button for iPhone / Smartphone / Tablet */}
           <button
             onClick={onClose}
             className="lg:hidden p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 active:scale-95 transition-all"
@@ -105,7 +113,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation Items (Touch Optimized) */}
+        {/* Navigation Items */}
         <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1 touch-pan-y overscroll-contain">
           {navigation.map((item, index) => {
             if ('section' in item) {
@@ -127,13 +135,13 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 key={item.href}
                 href={item.href!}
                 onClick={onClose}
-                className={`flex items-center gap-3 px-3.5 py-2.5 min-h-[44px] rounded-xl text-sm font-medium transition-all active:scale-[0.98] select-none ${
+                className={`flex items-center gap-3 px-3.5 py-2 min-h-[40px] rounded-xl text-sm font-medium transition-all active:scale-[0.98] select-none ${
                   isActive
                     ? 'bg-primary-50 text-primary-700 font-semibold shadow-xs border-l-4 border-primary-600 pl-2.5'
                     : 'text-gray-600 hover:bg-gray-100/80 hover:text-gray-900'
                 }`}
               >
-                <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
                 <span className="truncate">{item.name}</span>
               </Link>
             );
@@ -167,5 +175,3 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     </>
   );
 }
-
-

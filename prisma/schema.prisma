@@ -65,25 +65,30 @@ model JournalLine {
 
 // ===== ผู้ติดต่อ (ลูกค้า/คู่ค้า) =====
 model Contact {
-  id         String   @id @default(cuid())
-  name       String
-  taxId      String?
-  branchType String   @default("HEAD")
-  branchCode String   @default("00000")
-  address    String?
-  phone      String?
-  email      String?
-  isCustomer Boolean  @default(true)
-  isVendor   Boolean  @default(false)
-  invoices   Invoice[]
-  expenses   Expense[]
-  whtPayer   WithholdingTax[] @relation("WhtPayer")
-  whtPayee   WithholdingTax[] @relation("WhtPayee")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String           @id @default(cuid())
+  name            String
+  taxId           String?
+  branchType      String           @default("HEAD")
+  branchCode      String           @default("00000")
+  address         String?
+  phone           String?
+  email           String?
+  isCustomer      Boolean          @default(true)
+  isVendor        Boolean          @default(false)
+  invoices        Invoice[]
+  expenses        Expense[]
+  whtPayer        WithholdingTax[] @relation("WhtPayer")
+  whtPayee        WithholdingTax[] @relation("WhtPayee")
+  purchaseOrders  PurchaseOrder[]
+  goodsReceipts   GoodsReceipt[]
+  paymentVouchers PaymentVoucher[]
+  quotations      Quotation[]
+  salesOrders     SalesOrder[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
-// ===== ใบแจ้งหนี้ / ใบกำกับภาษี =====
+// ===== ใบแจ้งหนี้ / ใบกำกับภาษี (IV) =====
 model Invoice {
   id             String        @id @default(cuid())
   invoiceNumber  String        @unique
@@ -91,7 +96,10 @@ model Invoice {
   dueDate        DateTime
   contactId      String
   contact        Contact       @relation(fields: [contactId], references: [id])
+  soId           String?
+  warehouseId    String?
   status         String        @default("DRAFT")
+  discountAmount Float         @default(0)
   subtotal       Float         @default(0)
   vatRate        Float         @default(7)
   vatAmount      Float         @default(0)
@@ -119,10 +127,11 @@ model InvoiceItem {
   description String
   quantity    Float    @default(1)
   unitPrice   Float    @default(0)
+  discount    Float    @default(0)
   amount      Float    @default(0)
 }
 
-// ===== ใบเสร็จรับเงิน =====
+// ===== ใบเสร็จรับเงิน (RE) =====
 model Receipt {
   id             String   @id @default(cuid())
   receiptNumber  String   @unique
@@ -195,92 +204,335 @@ model TaxInvoice {
   vatAmount        Float
   invoiceId        String?  @unique
   invoice          Invoice? @relation(fields: [invoiceId], references: [id])
+  rrId             String?
   createdAt        DateTime @default(now())
 }
 
 // ===== หนังสือรับรองหัก ณ ที่จ่าย (50 ทวิ) =====
 model WithholdingTax {
-  id              String   @id @default(cuid())
-  whtNumber       String   @unique
-  formType        String
-  paymentDate     DateTime
-  payerContactId  String
-  payerContact    Contact  @relation("WhtPayer", fields: [payerContactId], references: [id])
-  payeeContactId  String
-  payeeContact    Contact  @relation("WhtPayee", fields: [payeeContactId], references: [id])
-  incomeCategory  String
-  incomeType      String
-  baseAmount      Float
-  whtRate         Float
-  whtAmount       Float
-  whtCondition    String   @default("1")
-  journalEntryId  String?
-  createdAt       DateTime @default(now())
+  id             String   @id @default(cuid())
+  whtNumber      String   @unique
+  formType       String
+  paymentDate    DateTime
+  payerContactId String
+  payerContact   Contact  @relation("WhtPayer", fields: [payerContactId], references: [id])
+  payeeContactId String
+  payeeContact   Contact  @relation("WhtPayee", fields: [payeeContactId], references: [id])
+  incomeCategory String
+  incomeType     String
+  baseAmount     Float
+  whtRate        Float
+  whtAmount      Float
+  whtCondition   String   @default("1")
+  journalEntryId String?
+  createdAt      DateTime @default(now())
+}
+
+// ===== คลังสินค้า (Multi-Warehouse) =====
+model Warehouse {
+  id            String            @id @default(cuid())
+  code          String            @unique
+  name          String
+  location      String?
+  isDefault     Boolean           @default(false)
+  isActive      Boolean           @default(true)
+  stocks        WarehouseStock[]
+  movements     StockMovement[]
+  adjustments   StockAdjustment[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts GoodsReceipt[]
+  salesOrders   SalesOrder[]
+  createdAt     DateTime          @default(now())
+}
+
+// ===== ยอดสินค้าแยกตามคลัง =====
+model WarehouseStock {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity    Float     @default(0)
+
+  @@unique([warehouseId, productId])
 }
 
 // ===== สินค้าและบริการ (Inventory / Product Catalog) =====
 model Product {
-  id           String          @id @default(cuid())
-  code         String          @unique
-  name         String
-  unit         String          @default("ชิ้น")
-  sellingPrice Float           @default(0)
-  costPrice    Float           @default(0)
-  currentStock Float           @default(0)
-  reorderPoint Float           @default(5)
-  isActive     Boolean         @default(true)
-  movements    StockMovement[]
-  invoiceItems InvoiceItem[]
-  expenseItems ExpenseItem[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id              String                @id @default(cuid())
+  code            String                @unique
+  name            String
+  unit            String                @default("ชิ้น")
+  sellingPrice    Float                 @default(0)
+  costPrice       Float                 @default(0)
+  currentStock    Float                 @default(0)
+  reorderPoint    Float                 @default(5)
+  isActive        Boolean               @default(true)
+  movements       StockMovement[]
+  warehouseStocks WarehouseStock[]
+  invoiceItems    InvoiceItem[]
+  expenseItems    ExpenseItem[]
+  poItems         PurchaseOrderItem[]
+  rrItems         GoodsReceiptItem[]
+  qtItems         QuotationItem[]
+  soItems         SalesOrderItem[]
+  adjustItems     StockAdjustmentItem[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 }
 
 // ===== การเคลื่อนไหวสต็อกสินค้า (Stock Movement Card) =====
 // type: IN (รับเข้า), OUT (จ่ายออก), ADJUST (ปรับปรุง)
 model StockMovement {
-  id               String   @id @default(cuid())
+  id               String     @id @default(cuid())
   productId        String
-  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product          Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId      String?
+  warehouse        Warehouse? @relation(fields: [warehouseId], references: [id])
   type             String
   quantity         Float
-  unitCost         Float    @default(0)
+  unitCost         Float      @default(0)
+  balanceAfter     Float      @default(0)
+  avgCostAfter     Float      @default(0)
   referenceDocType String?
   referenceDocId   String?
-  movementDate     DateTime @default(now())
+  movementDate     DateTime   @default(now())
   notes            String?
+}
+
+// ===== เอกสารปรับปรุงสต็อก (AJ) =====
+model StockAdjustment {
+  id             String                @id @default(cuid())
+  adjustNumber   String                @unique
+  adjustDate     DateTime
+  warehouseId    String
+  warehouse      Warehouse             @relation(fields: [warehouseId], references: [id])
+  adjustType     String                // IN, OUT, COUNT
+  reason         String?
+  status         String                @default("APPROVED") // APPROVED, VOIDED
+  totalValue     Float                 @default(0)
+  journalEntryId String?
+  items          StockAdjustmentItem[]
+  createdAt      DateTime              @default(now())
+}
+
+model StockAdjustmentItem {
+  id           String          @id @default(cuid())
+  adjustmentId String
+  adjustment   StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id])
+  quantity     Float           @default(0)
+  unitCost     Float           @default(0)
+  totalCost    Float           @default(0)
+  notes        String?
+}
+
+// ===== ใบสั่งซื้อ (PO - Purchase Order) =====
+model PurchaseOrder {
+  id             String              @id @default(cuid())
+  poNumber       String              @unique
+  poDate         DateTime
+  expectedDate   DateTime?
+  contactId      String
+  contact        Contact             @relation(fields: [contactId], references: [id])
+  warehouseId    String?
+  warehouse      Warehouse?          @relation(fields: [warehouseId], references: [id])
+  status         String              @default("APPROVED") // DRAFT, APPROVED, RECEIVED, VOIDED
+  vatType        String              @default("EXCLUSIVE")
+  discountAmount Float               @default(0)
+  subtotal       Float               @default(0)
+  vatRate        Float               @default(7)
+  vatAmount      Float               @default(0)
+  totalAmount    Float               @default(0)
+  notes          String?
+  items          PurchaseOrderItem[]
+  goodsReceipts  GoodsReceipt[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model PurchaseOrderItem {
+  id          String        @id @default(cuid())
+  poId        String
+  po          PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?      @relation(fields: [productId], references: [id])
+  description String
+  quantity    Float         @default(1)
+  unitPrice   Float         @default(0)
+  discount    Float         @default(0)
+  amount      Float         @default(0)
+}
+
+// ===== ใบรับสินค้า / ซื้อเชื่อ (RR - Goods Receipt / AP Bill) =====
+model GoodsReceipt {
+  id              String             @id @default(cuid())
+  rrNumber        String             @unique
+  rrDate          DateTime
+  dueDate         DateTime
+  vendorInvoiceNo String?
+  poId            String?
+  po              PurchaseOrder?     @relation(fields: [poId], references: [id])
+  contactId       String
+  contact         Contact            @relation(fields: [contactId], references: [id])
+  warehouseId     String?
+  warehouse       Warehouse?         @relation(fields: [warehouseId], references: [id])
+  status          String             @default("UNPAID") // UNPAID, PAID, VOIDED
+  vatType         String             @default("EXCLUSIVE")
+  discountAmount  Float              @default(0)
+  subtotal        Float              @default(0)
+  vatRate         Float              @default(7)
+  vatAmount       Float              @default(0)
+  whtRate         Float              @default(0)
+  whtAmount       Float              @default(0)
+  totalAmount     Float              @default(0)
+  netAmount       Float              @default(0)
+  notes           String?
+  journalEntryId  String?
+  items           GoodsReceiptItem[]
+  paymentVouchers PaymentVoucher[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model GoodsReceiptItem {
+  id          String       @id @default(cuid())
+  rrId        String
+  rr          GoodsReceipt @relation(fields: [rrId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?     @relation(fields: [productId], references: [id])
+  description String
+  quantity    Float        @default(1)
+  unitPrice   Float        @default(0)
+  discount    Float        @default(0)
+  amount      Float        @default(0)
+}
+
+// ===== ใบสำคัญจ่ายชำระหนี้ (PV - Payment Voucher) =====
+model PaymentVoucher {
+  id             String        @id @default(cuid())
+  pvNumber       String        @unique
+  pvDate         DateTime
+  rrId           String?
+  rr             GoodsReceipt? @relation(fields: [rrId], references: [id])
+  contactId      String?
+  contact        Contact?      @relation(fields: [contactId], references: [id])
+  contactName    String?
+  paymentMethod  String        @default("TRANSFER")
+  chequeNumber   String?
+  amount         Float         @default(0)
+  whtAmount      Float         @default(0)
+  netPaid        Float         @default(0)
+  status         String        @default("PAID") // PAID, VOIDED
+  notes          String?
+  journalEntryId String?
+  createdAt      DateTime      @default(now())
+}
+
+// ===== ใบเสนอราคา (QT - Quotation) =====
+model Quotation {
+  id             String          @id @default(cuid())
+  qtNumber       String          @unique
+  qtDate         DateTime
+  validUntil     DateTime
+  contactId      String
+  contact        Contact         @relation(fields: [contactId], references: [id])
+  status         String          @default("APPROVED") // DRAFT, APPROVED, ORDERED, VOIDED
+  vatType        String          @default("EXCLUSIVE")
+  discountAmount Float           @default(0)
+  subtotal       Float           @default(0)
+  vatRate        Float           @default(7)
+  vatAmount      Float           @default(0)
+  totalAmount    Float           @default(0)
+  notes          String?
+  items          QuotationItem[]
+  salesOrders    SalesOrder[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model QuotationItem {
+  id          String    @id @default(cuid())
+  qtId        String
+  qt          Quotation @relation(fields: [qtId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id])
+  description String
+  quantity    Float     @default(1)
+  unitPrice   Float     @default(0)
+  discount    Float     @default(0)
+  amount      Float     @default(0)
+}
+
+// ===== ใบสั่งขาย (SO - Sales Order) =====
+model SalesOrder {
+  id             String           @id @default(cuid())
+  soNumber       String           @unique
+  soDate         DateTime
+  deliveryDate   DateTime?
+  qtId           String?
+  qt             Quotation?       @relation(fields: [qtId], references: [id])
+  contactId      String
+  contact        Contact          @relation(fields: [contactId], references: [id])
+  warehouseId    String?
+  warehouse      Warehouse?       @relation(fields: [warehouseId], references: [id])
+  status         String           @default("APPROVED") // DRAFT, APPROVED, INVOICED, VOIDED
+  vatType        String           @default("EXCLUSIVE")
+  discountAmount Float            @default(0)
+  subtotal       Float            @default(0)
+  vatRate        Float            @default(7)
+  vatAmount      Float            @default(0)
+  totalAmount    Float            @default(0)
+  notes          String?
+  items          SalesOrderItem[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model SalesOrderItem {
+  id          String     @id @default(cuid())
+  soId        String
+  so          SalesOrder @relation(fields: [soId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?   @relation(fields: [productId], references: [id])
+  description String
+  quantity    Float      @default(1)
+  unitPrice   Float      @default(0)
+  discount    Float      @default(0)
+  amount      Float      @default(0)
 }
 
 // ===== สินทรัพย์ถาวร & ค่าเสื่อมราคา (Fixed Assets & Depreciation) =====
 // status: ACTIVE, DISPOSED
 model FixedAsset {
-  id                 String   @id @default(cuid())
-  code               String   @unique
-  name               String
-  category           String
-  purchaseDate       DateTime
-  costValue          Float
-  salvageValue       Float    @default(1)
-  usefulLifeYears    Float    @default(5)
-  accumDepreciation  Float    @default(0)
-  status             String   @default("ACTIVE")
-  lastDeprDate       DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String    @id @default(cuid())
+  code              String    @unique
+  name              String
+  category          String
+  purchaseDate      DateTime
+  costValue         Float
+  salvageValue      Float     @default(1)
+  usefulLifeYears   Float     @default(5)
+  accumDepreciation Float     @default(0)
+  status            String    @default("ACTIVE")
+  lastDeprDate      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 // ===== รายการกระทบยอดธนาคาร (Bank Statement Line) =====
 model BankStatementLine {
-  id            String   @id @default(cuid())
-  bankAccount   String   @default("SCB")
+  id             String   @id @default(cuid())
+  bankAccount    String   @default("SCB")
   transactionDate DateTime
-  description   String
-  amount        Float
-  type          String   // DEBIT (ถอน/จ่าย), CREDIT (ฝาก/รับ)
-  isReconciled  Boolean  @default(false)
+  description    String
+  amount         Float
+  type           String   // DEBIT (ถอน/จ่าย), CREDIT (ฝาก/รับ)
+  isReconciled   Boolean  @default(false)
   matchedDocType String?
   matchedDocId   String?
-  createdAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
 }
 
 // ===== ผู้ใช้งานและสิทธิ์เข้าถึงระบบ (Users & Roles) =====

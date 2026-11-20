@@ -46,15 +46,20 @@ export const createJournalSchema = z.object({
 });
 
 export const itemLineSchema = z.object({
+  productId: z.string().optional().nullable(),
   description: z.string().min(1, 'กรุณาระบุรายละเอียดรายการ'),
   quantity: z.number().min(0.01, 'จำนวนต้องมากกว่า 0'),
   unitPrice: z.number().min(0, 'ราคาต่อหน่วยต้องไม่ติดลบ'),
+  discount: z.number().min(0, 'ส่วนลดต้องไม่ติดลบ').optional().default(0),
 });
 
 export const createInvoiceSchema = z.object({
   invoiceDate: z.string().min(1, 'กรุณาระบุวันที่ออก'),
   dueDate: z.string().min(1, 'กรุณาระบุวันครบกำหนด'),
   contactId: z.string().min(1, 'กรุณาเลือกลูกค้า'),
+  soId: z.string().optional().nullable(),
+  warehouseId: z.string().optional().nullable(),
+  discountAmount: z.number().min(0, 'ส่วนลดท้ายบิลต้องไม่ติดลบ').optional().default(0),
   vatType: z.enum(['EXCLUSIVE', 'INCLUSIVE', 'NO_VAT']).default('EXCLUSIVE'),
   vatRate: z.number().default(7),
   whtRate: z.number().default(0),

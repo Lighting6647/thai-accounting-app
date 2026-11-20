@@ -1,37 +1,43 @@
-// ===== Thai Tax Engine =====
-// คำนวณ VAT 7% และภาษีหัก ณ ที่จ่าย (WHT) ตามกฎสรรพากรไทย
+// ===== Thai Tax & Inventory Costing Engine =====
+// คำนวณ VAT 7%, ภาษีหัก ณ ที่จ่าย (WHT), ส่วนลด และต้นทุนเฉลี่ยเคลื่อนที่ (Moving Average)
 
 export type VatType = 'INCLUSIVE' | 'EXCLUSIVE' | 'NO_VAT';
 
 export interface TaxCalculationInput {
-  subtotal: number;       // ราคาก่อน VAT (ถ้า EXCLUSIVE) หรือ ราคารวม VAT (ถ้า INCLUSIVE)
+  subtotal: number;       // ยอดรวมรายการก่อนหักส่วนลดท้ายบิล (ถ้า EXCLUSIVE/NO_VAT คือยอดก่อน VAT, ถ้า INCLUSIVE คือยอดรวม VAT)
+  discountAmount?: number; // ส่วนลดท้ายบิล (บาท)
   vatType: VatType;
   vatRate?: number;        // ค่าเริ่มต้น 7%
   whtRate?: number;        // อัตราหัก ณ ที่จ่าย (0, 1, 2, 3, 5%)
 }
 
 export interface TaxCalculationResult {
+  grossAmount: number;    // ยอดรวมรายการก่อนหักส่วนลดท้ายบิล
+  discountAmount: number; // ส่วนลดท้ายบิล
   subtotal: number;       // ราคาก่อน VAT (ฐานภาษี)
   vatRate: number;
   vatAmount: number;
   whtRate: number;
   whtAmount: number;
   totalAmount: number;    // subtotal + vatAmount
-  netAmount: number;      // totalAmount - whtAmount (ยอดรับสุทธิ)
+  netAmount: number;      // totalAmount - whtAmount (ยอดรับ/จ่ายสุทธิ)
 }
 
 /**
- * คำนวณภาษี VAT 7% และหัก ณ ที่จ่าย
- * 
+ * คำนวณภาษี VAT 7%, ส่วนลดท้ายบิล และหัก ณ ที่จ่าย
+ *
  * กฎสำคัญ:
- * - VAT EXCLUSIVE: ราคาที่ใส่คือราคาก่อน VAT → VAT = subtotal × 7%
- * - VAT INCLUSIVE: ราคาที่ใส่รวม VAT แล้ว → subtotal = price / 1.07, VAT = price - subtotal
+ * - VAT EXCLUSIVE: ราคาที่ใส่คือราคาก่อน VAT → VAT = ฐานหลังหักส่วนลด × 7%
+ * - VAT INCLUSIVE: ราคาที่ใส่รวม VAT แล้ว → subtotal = ยอดหลังหักส่วนลด / 1.07, VAT = ยอดหลังหักส่วนลด - subtotal
  * - NO_VAT: ไม่คิด VAT
  * - WHT คิดจากฐานภาษี (subtotal) ไม่ใช่จาก totalAmount
  */
 export function calculateTax(input: TaxCalculationInput): TaxCalculationResult {
   const vatRate = input.vatRate ?? 7;
   const whtRate = input.whtRate ?? 0;
+  const grossAmount = roundMoney(Math.max(0, input.subtotal));
+  const discountAmount = roundMoney(Math.min(grossAmount, Math.max(0, input.discountAmount ?? 0)));
+  const afterDiscount = roundMoney(Math.max(0, grossAmount - discountAmount));
 
   let subtotal: number;
   let vatAmount: number;
@@ -39,20 +45,20 @@ export function calculateTax(input: TaxCalculationInput): TaxCalculationResult {
   switch (input.vatType) {
     case 'INCLUSIVE': {
       // ราคารวม VAT → ต้องแยก VAT ออก
-      const divisor = 1 + (vatRate / 100);
-      subtotal = roundMoney(input.subtotal / divisor);
-      vatAmount = roundMoney(input.subtotal - subtotal);
+      const divisor = 1 + vatRate / 100;
+      subtotal = roundMoney(afterDiscount / divisor);
+      vatAmount = roundMoney(afterDiscount - subtotal);
       break;
     }
     case 'EXCLUSIVE': {
       // ราคาไม่รวม VAT → เพิ่ม VAT
-      subtotal = roundMoney(input.subtotal);
+      subtotal = afterDiscount;
       vatAmount = roundMoney(subtotal * (vatRate / 100));
       break;
     }
     case 'NO_VAT':
     default: {
-      subtotal = roundMoney(input.subtotal);
+      subtotal = afterDiscount;
       vatAmount = 0;
       break;
     }
@@ -65,6 +71,8 @@ export function calculateTax(input: TaxCalculationInput): TaxCalculationResult {
   const netAmount = roundMoney(totalAmount - whtAmount);
 
   return {
+    grossAmount,
+    discountAmount,
     subtotal,
     vatRate: input.vatType === 'NO_VAT' ? 0 : vatRate,
     vatAmount,
@@ -80,6 +88,41 @@ export function calculateTax(input: TaxCalculationInput): TaxCalculationResult {
  */
 export function calculateLineTotal(quantity: number, unitPrice: number): number {
   return roundMoney(quantity * unitPrice);
+}
+
+/**
+ * คำนวณราคารวมสุทธิของแถวรายการหลังหักส่วนลดรายตัว
+ */
+export function calculateLineAmount(quantity: number, unitPrice: number, discount = 0): number {
+  const gross = quantity * unitPrice;
+  const net = Math.max(0, gross - Math.max(0, discount));
+  return roundMoney(net);
+}
+
+/**
+ * คำนวณต้นทุนเฉลี่ยเคลื่อนที่ (Moving Average Cost) ตามมาตรฐานโปรแกรมบัญชี Express
+ * สูตร: ((สต็อกเดิม × ต้นทุนเดิม) + (จำนวนรับเข้า × ต้นทุนรับเข้า)) / (สต็อกเดิม + จำนวนรับเข้า)
+ */
+export function calculateMovingAverage(
+  currentStock: number,
+  currentCost: number,
+  incomingQty: number,
+  incomingUnitCost: number
+): { newStock: number; newAvgCost: number } {
+  const safeCurrentStock = Math.max(0, currentStock);
+  const safeCurrentCost = Math.max(0, currentCost);
+  const safeIncomingQty = Math.max(0, incomingQty);
+  const safeIncomingCost = Math.max(0, incomingUnitCost);
+
+  const newStock = roundMoney(safeCurrentStock + safeIncomingQty);
+  if (newStock <= 0) {
+    return { newStock: 0, newAvgCost: roundMoney(safeIncomingCost || safeCurrentCost) };
+  }
+
+  const totalValue = safeCurrentStock * safeCurrentCost + safeIncomingQty * safeIncomingCost;
+  const newAvgCost = roundMoney(totalValue / newStock);
+
+  return { newStock, newAvgCost };
 }
 
 /**

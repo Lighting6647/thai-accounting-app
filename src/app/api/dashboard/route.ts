@@ -1,9 +1,61 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { DashboardData } from '@/types';
+import { roundMoney } from '@/lib/tax-engine';
+import { AgingBucketSummary, AgingDocItem, DashboardData } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
+function buildAgingSummary(
+  docs: { id: string; docNumber: string; docDate: Date; dueDate: Date; contactName: string; netAmount: number }[],
+  now: Date
+): { summary: AgingBucketSummary; items: AgingDocItem[] } {
+  const summary: AgingBucketSummary = {
+    current: 0,
+    days1to30: 0,
+    days31to60: 0,
+    over60: 0,
+    total: 0,
+    count: docs.length,
+  };
+
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const items: AgingDocItem[] = [];
+
+  for (const doc of docs) {
+    const dueStart = new Date(doc.dueDate.getFullYear(), doc.dueDate.getMonth(), doc.dueDate.getDate()).getTime();
+    const daysOverdue = Math.floor((todayStart - dueStart) / 86400000);
+
+    let bucket: AgingDocItem['bucket'] = 'ยังไม่ครบกำหนด';
+    if (daysOverdue <= 0) {
+      summary.current = roundMoney(summary.current + doc.netAmount);
+      bucket = 'ยังไม่ครบกำหนด';
+    } else if (daysOverdue <= 30) {
+      summary.days1to30 = roundMoney(summary.days1to30 + doc.netAmount);
+      bucket = '1-30 วัน';
+    } else if (daysOverdue <= 60) {
+      summary.days31to60 = roundMoney(summary.days31to60 + doc.netAmount);
+      bucket = '31-60 วัน';
+    } else {
+      summary.over60 = roundMoney(summary.over60 + doc.netAmount);
+      bucket = 'เกิน 60 วัน';
+    }
+
+    summary.total = roundMoney(summary.total + doc.netAmount);
+    items.push({
+      id: doc.id,
+      docNumber: doc.docNumber,
+      docDate: doc.docDate.toISOString(),
+      dueDate: doc.dueDate.toISOString(),
+      contactName: doc.contactName,
+      netAmount: doc.netAmount,
+      daysOverdue,
+      bucket,
+    });
+  }
+
+  items.sort((a, b) => b.daysOverdue - a.daysOverdue);
+  return { summary, items };
+}
 
 export async function GET() {
   try {
@@ -27,9 +79,16 @@ export async function GET() {
         expenseDate: { gte: firstDayOfMonth, lte: lastDayOfMonth },
       },
     });
-    const expenses = expenseResult._sum.netPayment || 0;
+    const rrExpenseResult = await prisma.goodsReceipt.aggregate({
+      _sum: { netAmount: true },
+      where: {
+        status: { not: 'VOIDED' },
+        rrDate: { gte: firstDayOfMonth, lte: lastDayOfMonth },
+      },
+    });
+    const expenses = roundMoney((expenseResult._sum.netPayment || 0) + (rrExpenseResult._sum.netAmount || 0));
 
-    const profit = revenue - expenses;
+    const profit = roundMoney(revenue - expenses);
 
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
@@ -50,11 +109,77 @@ export async function GET() {
         taxPeriodYear: currentYear,
       },
     });
-    const vatPayable = (salesTaxResult._sum.vatAmount || 0) - (purchaseTaxResult._sum.vatAmount || 0);
+    const vatPayable = roundMoney((salesTaxResult._sum.vatAmount || 0) - (purchaseTaxResult._sum.vatAmount || 0));
 
-    const overdueCount = await prisma.invoice.count({
-      where: { status: 'OVERDUE' },
+    // AR Aging
+    const unpaidInvoices = await prisma.invoice.findMany({
+      where: { status: { in: ['UNPAID', 'OVERDUE'] } },
+      include: { contact: true },
     });
+    const arAgingResult = buildAgingSummary(
+      unpaidInvoices.map((inv) => ({
+        id: inv.id,
+        docNumber: inv.invoiceNumber,
+        docDate: inv.invoiceDate,
+        dueDate: inv.dueDate,
+        contactName: inv.contact?.name || 'ทั่วไป',
+        netAmount: inv.netAmount,
+      })),
+      now
+    );
+
+    // AP Aging (from Goods Receipts RR)
+    const unpaidGoodsReceipts = await prisma.goodsReceipt.findMany({
+      where: { status: 'UNPAID' },
+      include: { contact: true },
+    });
+    const apAgingResult = buildAgingSummary(
+      unpaidGoodsReceipts.map((rr) => ({
+        id: rr.id,
+        docNumber: rr.rrNumber,
+        docDate: rr.rrDate,
+        dueDate: rr.dueDate,
+        contactName: rr.contact?.name || 'ทั่วไป',
+        netAmount: rr.netAmount,
+      })),
+      now
+    );
+
+    const overdueCount = unpaidInvoices.filter(
+      (inv) => inv.status === 'OVERDUE' || inv.dueDate < now
+    ).length;
+
+    // Inventory & Low Stock Alert
+    const activeProducts = await prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: { currentStock: 'asc' },
+    });
+
+    const inventoryValuation = roundMoney(
+      activeProducts.reduce((sum, p) => sum + p.currentStock * p.costPrice, 0)
+    );
+    const lowStockProducts = activeProducts
+      .filter((p) => p.currentStock <= p.reorderPoint)
+      .map((p) => ({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        unit: p.unit,
+        currentStock: p.currentStock,
+        reorderPoint: p.reorderPoint,
+        costPrice: p.costPrice,
+      }));
+
+    // Express Workflow Counters
+    const [poPendingCount, pvPaidCount, qtPendingCount, soPendingCount, rePaidCount, warehouseCount] =
+      await Promise.all([
+        prisma.purchaseOrder.count({ where: { status: { in: ['DRAFT', 'APPROVED'] } } }),
+        prisma.paymentVoucher.count({ where: { status: 'PAID' } }),
+        prisma.quotation.count({ where: { status: { in: ['DRAFT', 'APPROVED'] } } }),
+        prisma.salesOrder.count({ where: { status: { in: ['DRAFT', 'APPROVED'] } } }),
+        prisma.receipt.count(),
+        prisma.warehouse.count({ where: { isActive: true } }),
+      ]);
 
     const recentInvoicesRaw = await prisma.invoice.findMany({
       take: 5,
@@ -84,11 +209,15 @@ export async function GET() {
         _sum: { netPayment: true },
         where: { status: { not: 'VOIDED' }, expenseDate: { gte: start, lte: end } },
       });
+      const mRr = await prisma.goodsReceipt.aggregate({
+        _sum: { netAmount: true },
+        where: { status: { not: 'VOIDED' }, rrDate: { gte: start, lte: end } },
+      });
 
       monthlyChart.push({
         month: `${monthsName[start.getMonth()]} ${(start.getFullYear() + 543) % 100}`,
         revenue: mRev._sum.netAmount || 0,
-        expenses: mExp._sum.netPayment || 0,
+        expenses: roundMoney((mExp._sum.netPayment || 0) + (mRr._sum.netAmount || 0)),
       });
     }
 
@@ -98,6 +227,22 @@ export async function GET() {
       profit,
       vatPayable,
       overdueCount,
+      inventoryValuation,
+      arAging: arAgingResult.summary,
+      apAging: apAgingResult.summary,
+      arAgingDocs: arAgingResult.items,
+      apAgingDocs: apAgingResult.items,
+      lowStockProducts,
+      expressWorkflow: {
+        poPendingCount,
+        rrUnpaidCount: unpaidGoodsReceipts.length,
+        pvPaidCount,
+        qtPendingCount,
+        soPendingCount,
+        ivUnpaidCount: unpaidInvoices.length,
+        rePaidCount,
+        warehouseCount,
+      },
       recentInvoices: recentInvoicesRaw.map((inv) => ({
         id: inv.id,
         invoiceNumber: inv.invoiceNumber,

@@ -3,17 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/sync-provider.cjs && next dev",
+    "build": "node scripts/sync-provider.cjs && prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "postinstall": "node scripts/sync-provider.cjs && prisma generate",
+    "db:generate": "node scripts/sync-provider.cjs && prisma generate",
+    "db:push": "node scripts/sync-provider.cjs && prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
+    "db:seed:erp": "npx tsx prisma/seed-express-erp.ts",
     "db:studio": "prisma studio",
-    "db:setup": "prisma db push && npx tsx prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset && npx tsx prisma/seed.ts"
+    "db:setup": "node scripts/sync-provider.cjs && prisma db push && npx tsx prisma/seed.ts && npx tsx prisma/seed-express-erp.ts",
+    "db:reset": "node scripts/sync-provider.cjs && prisma db push --force-reset && npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

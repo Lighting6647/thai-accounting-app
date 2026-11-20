@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { generateDocNumber } from '@/lib/doc-number';
-import { calculateTax } from '@/lib/tax-engine';
+import { roundMoney, VatType } from '@/lib/tax-engine';
 import { createInvoiceSchema } from '@/lib/validations';
+import {
+  computeErpDocumentTotals,
+  ensureDefaultWarehouse,
+  getAccountMap,
+  upsertWarehouseStockDelta,
+} from '@/lib/erp-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +24,7 @@ export async function GET(request: Request) {
         where: { id },
         include: {
           contact: true,
-          items: true,
+          items: { include: { product: true } },
           receipts: true,
           taxInvoice: true,
         },
@@ -40,8 +46,9 @@ export async function GET(request: Request) {
     }
 
     const where: any = {};
-    if (status) {
-      where.status = status;
+    if (status && status !== 'ALL') {
+      const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
+      where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
     }
     if (search) {
       where.OR = [
@@ -65,6 +72,7 @@ export async function GET(request: Request) {
       status: inv.status,
       totalAmount: inv.totalAmount,
       netAmount: inv.netAmount,
+      soId: inv.soId,
     }));
 
     return NextResponse.json(formattedInvoices);
@@ -85,20 +93,13 @@ export async function POST(request: Request) {
     }
 
     const body = validation.data;
-
-    let subtotalRaw = 0;
-    body.items.forEach((item) => {
-      subtotalRaw += item.quantity * item.unitPrice;
-    });
-
-    const taxResult = calculateTax({
-      subtotal: subtotalRaw,
-      vatType: body.vatType,
-      vatRate: body.vatRate,
-      whtRate: body.whtRate,
-    });
-
-    const invoiceNumber = await generateDocNumber('IV');
+    const { normalizedItems, tax } = computeErpDocumentTotals(
+      body.items,
+      body.discountAmount ?? 0,
+      body.vatType as VatType,
+      body.vatRate,
+      body.whtRate
+    );
 
     const contact = await prisma.contact.findUnique({
       where: { id: body.contactId },
@@ -109,53 +110,160 @@ export async function POST(request: Request) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      const hasStockItems = normalizedItems.some((item) => Boolean(item.productId));
+      const targetWh = body.warehouseId
+        ? await tx.warehouse.findUnique({ where: { id: body.warehouseId } })
+        : hasStockItems
+          ? await ensureDefaultWarehouse(tx)
+          : null;
+
+      // ตรวจสอบสต็อกรวมก่อนตัดขาย (ห้ามสต็อกติดลบเด็ดขาด)
+      const requestedByProduct = new Map<string, number>();
+      for (const item of normalizedItems) {
+        if (!item.productId) continue;
+        requestedByProduct.set(
+          item.productId,
+          roundMoney((requestedByProduct.get(item.productId) || 0) + item.quantity)
+        );
+      }
+
+      const productSnapshots = new Map<string, { currentStock: number; costPrice: number; name: string; unit: string }>();
+
+      for (const [productId, totalQty] of Array.from(requestedByProduct.entries())) {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) {
+          throw new Error('ไม่พบข้อมูลสินค้าที่เลือกในระบบ');
+        }
+        if (product.currentStock < totalQty) {
+          throw new Error(
+            `สินค้า "${product.name}" คงเหลือไม่พอขาย (คงเหลือ ${product.currentStock} ${product.unit}, ต้องการ ${totalQty})`
+          );
+        }
+        if (targetWh) {
+          const whStock = await tx.warehouseStock.findUnique({
+            where: { warehouseId_productId: { warehouseId: targetWh.id, productId } },
+          });
+          if (whStock && whStock.quantity < totalQty) {
+            throw new Error(
+              `สินค้า "${product.name}" ในคลัง "${targetWh.name}" คงเหลือไม่พอ (${whStock.quantity} ${product.unit})`
+            );
+          }
+          if (!whStock && product.currentStock > 0) {
+            await tx.warehouseStock.create({
+              data: { warehouseId: targetWh.id, productId, quantity: product.currentStock },
+            });
+          }
+        }
+        productSnapshots.set(productId, {
+          currentStock: product.currentStock,
+          costPrice: product.costPrice,
+          name: product.name,
+          unit: product.unit,
+        });
+      }
+
+      const invoiceNumber = await generateDocNumber('IV', tx);
+
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber,
           invoiceDate: new Date(body.invoiceDate),
           dueDate: new Date(body.dueDate),
           contactId: body.contactId,
+          soId: body.soId || null,
+          warehouseId: targetWh?.id || null,
           vatType: body.vatType,
-          subtotal: taxResult.subtotal,
-          vatRate: taxResult.vatRate,
-          vatAmount: taxResult.vatAmount,
-          whtRate: taxResult.whtRate,
-          whtAmount: taxResult.whtAmount,
-          totalAmount: taxResult.totalAmount,
-          netAmount: taxResult.netAmount,
+          discountAmount: tax.discountAmount,
+          subtotal: tax.subtotal,
+          vatRate: tax.vatRate,
+          vatAmount: tax.vatAmount,
+          whtRate: tax.whtRate,
+          whtAmount: tax.whtAmount,
+          totalAmount: tax.totalAmount,
+          netAmount: tax.netAmount,
           notes: body.notes,
           status: 'UNPAID',
           items: {
-            create: body.items.map((item) => ({
+            create: normalizedItems.map((item) => ({
+              productId: item.productId,
               description: item.description,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
-              amount: item.quantity * item.unitPrice,
+              discount: item.discount,
+              amount: item.amount,
             })),
           },
         },
       });
 
-      // Journal Entry
-      const arAccount = await tx.chartOfAccount.findFirst({ where: { code: '1120' } });
-      const whtAccount = await tx.chartOfAccount.findFirst({ where: { code: '1140' } });
-      const revenueAccount = await tx.chartOfAccount.findFirst({ where: { code: '4100' } });
-      const vatAccount = await tx.chartOfAccount.findFirst({ where: { code: '2120' } });
+      if (body.soId) {
+        await tx.salesOrder.update({
+          where: { id: body.soId },
+          data: { status: 'INVOICED' },
+        });
+      }
+
+      // ตัดสต็อก + บันทึก Stock Movement (OUT) + คำนวณต้นทุนขาย (COGS)
+      let totalCogs = 0;
+      for (const item of normalizedItems) {
+        if (!item.productId) continue;
+        const snap = productSnapshots.get(item.productId);
+        if (!snap) continue;
+
+        const nextStock = roundMoney(snap.currentStock - item.quantity);
+        snap.currentStock = nextStock;
+
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { currentStock: nextStock },
+        });
+
+        if (targetWh) {
+          await upsertWarehouseStockDelta(tx, targetWh.id, item.productId, -item.quantity);
+        }
+
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            warehouseId: targetWh?.id || null,
+            type: 'OUT',
+            quantity: item.quantity,
+            unitCost: snap.costPrice,
+            balanceAfter: nextStock,
+            avgCostAfter: snap.costPrice,
+            referenceDocType: 'IV',
+            referenceDocId: invoice.id,
+            movementDate: new Date(body.invoiceDate),
+            notes: `ตัดสต็อกขายสินค้าตามบิล ${invoiceNumber}`,
+          },
+        });
+
+        totalCogs = roundMoney(totalCogs + item.quantity * snap.costPrice);
+      }
+
+      // Auto-GL Journal Entry
+      const accMap = await getAccountMap(tx, ['1120', '1140', '4100', '2120', '5100', '1150']);
+      const arAccount = accMap['1120'];
+      const whtAccount = accMap['1140'];
+      const revenueAccount = accMap['4100'];
+      const vatAccount = accMap['2120'];
+      const cogsAccount = accMap['5100'];
+      const inventoryAccount = accMap['1150'];
 
       if (arAccount && revenueAccount) {
-        const jeLines = [];
+        const jeLines: any[] = [];
         // Dr. ลูกหนี้การค้า
         jeLines.push({
           accountId: arAccount.id,
-          debitAmount: taxResult.netAmount,
+          debitAmount: tax.netAmount,
           creditAmount: 0,
           description: `ลูกหนี้การค้า - ${invoiceNumber}`,
         });
         // Dr. WHT ค้างรับ (ถ้ามี)
-        if (taxResult.whtAmount > 0 && whtAccount) {
+        if (tax.whtAmount > 0 && whtAccount) {
           jeLines.push({
             accountId: whtAccount.id,
-            debitAmount: taxResult.whtAmount,
+            debitAmount: tax.whtAmount,
             creditAmount: 0,
             description: `ภาษีหัก ณ ที่จ่ายค้างรับ - ${invoiceNumber}`,
           });
@@ -164,20 +272,35 @@ export async function POST(request: Request) {
         jeLines.push({
           accountId: revenueAccount.id,
           debitAmount: 0,
-          creditAmount: taxResult.subtotal,
+          creditAmount: tax.subtotal,
           description: `รายได้ - ${invoiceNumber}`,
         });
         // Cr. ภาษีขาย (ถ้ามี)
-        if (taxResult.vatAmount > 0 && vatAccount) {
+        if (tax.vatAmount > 0 && vatAccount) {
           jeLines.push({
             accountId: vatAccount.id,
             debitAmount: 0,
-            creditAmount: taxResult.vatAmount,
+            creditAmount: tax.vatAmount,
             description: `ภาษีขาย - ${invoiceNumber}`,
           });
         }
+        // Dr. ต้นทุนขาย / Cr. สินค้าคงเหลือ (Moving Average COGS)
+        if (totalCogs > 0 && cogsAccount && inventoryAccount) {
+          jeLines.push({
+            accountId: cogsAccount.id,
+            debitAmount: totalCogs,
+            creditAmount: 0,
+            description: `ต้นทุนขายตามวิธีถัวเฉลี่ย - ${invoiceNumber}`,
+          });
+          jeLines.push({
+            accountId: inventoryAccount.id,
+            debitAmount: 0,
+            creditAmount: totalCogs,
+            description: `ตัดสินค้าคงเหลือ - ${invoiceNumber}`,
+          });
+        }
 
-        const jvNumber = await generateDocNumber('JV');
+        const jvNumber = await generateDocNumber('JV', tx);
         const je = await tx.journalEntry.create({
           data: {
             entryNumber: jvNumber,
@@ -197,7 +320,7 @@ export async function POST(request: Request) {
       }
 
       // Tax Invoice (ถ้ามี VAT)
-      if (taxResult.vatAmount > 0) {
+      if (tax.vatAmount > 0) {
         const invDate = new Date(body.invoiceDate);
         await tx.taxInvoice.create({
           data: {
@@ -209,9 +332,9 @@ export async function POST(request: Request) {
             contactName: contact.name,
             contactTaxId: contact.taxId || '-',
             contactBranch: contact.branchCode || '00000',
-            subtotalAmount: taxResult.subtotal,
-            vatRate: taxResult.vatRate,
-            vatAmount: taxResult.vatAmount,
+            subtotalAmount: tax.subtotal,
+            vatRate: tax.vatRate,
+            vatAmount: tax.vatAmount,
             invoiceId: invoice.id,
           },
         });
@@ -223,11 +346,11 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('Invoices API Error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 400 });
   }
 }
 
-// VOID / ยกเลิกใบแจ้งหนี้ พร้อมสร้าง Reversal Journal Entry
+// VOID / ยกเลิกใบแจ้งหนี้ พร้อมสร้าง Reversal Journal Entry และคืนสต็อก
 export async function PATCH(request: Request) {
   try {
     const { id, action } = await request.json();
@@ -237,6 +360,7 @@ export async function PATCH(request: Request) {
 
     const invoice = await prisma.invoice.findUnique({
       where: { id },
+      include: { items: true },
     });
 
     if (!invoice) {
@@ -261,11 +385,48 @@ export async function PATCH(request: Request) {
         data: { status: 'VOIDED' },
       });
 
-      // 2. ถ้ามี Journal Entry เดิม ให้สร้าง Reversal Entry
-      if (journalEntry) {
-        const revDocNumber = await generateDocNumber('JV');
+      // 2. คืนสต็อกสินค้าที่ตัดไปตอนขาย
+      for (const item of invoice.items) {
+        if (!item.productId) continue;
+        const product = await tx.product.findUnique({ where: { id: item.productId } });
+        if (!product) continue;
 
-        // สลับขา Dr. เป็น Cr. และ Cr. เป็น Dr.
+        const restoredStock = roundMoney(product.currentStock + item.quantity);
+        await tx.product.update({
+          where: { id: product.id },
+          data: { currentStock: restoredStock },
+        });
+        if (invoice.warehouseId) {
+          await upsertWarehouseStockDelta(tx, invoice.warehouseId, product.id, item.quantity);
+        }
+        await tx.stockMovement.create({
+          data: {
+            productId: product.id,
+            warehouseId: invoice.warehouseId,
+            type: 'IN',
+            quantity: item.quantity,
+            unitCost: product.costPrice,
+            balanceAfter: restoredStock,
+            avgCostAfter: product.costPrice,
+            referenceDocType: 'IV_VOID',
+            referenceDocId: invoice.id,
+            notes: `คืนสต็อกจากการยกเลิกใบแจ้งหนี้ ${invoice.invoiceNumber}`,
+          },
+        });
+      }
+
+      // 3. คืนสถานะใบสั่งขาย (ถ้ามี)
+      if (invoice.soId) {
+        await tx.salesOrder.update({
+          where: { id: invoice.soId },
+          data: { status: 'APPROVED' },
+        });
+      }
+
+      // 4. ถ้ามี Journal Entry เดิม ให้สร้าง Reversal Entry
+      if (journalEntry) {
+        const revDocNumber = await generateDocNumber('JV', tx);
+
         const reversedLines = journalEntry.lines.map((line) => ({
           accountId: line.accountId,
           debitAmount: line.creditAmount,
@@ -286,7 +447,7 @@ export async function PATCH(request: Request) {
         });
       }
 
-      // 3. ลบ Tax Invoice ออกเพื่อไม่ให้ติดในรายงานภาษี
+      // 5. ลบ Tax Invoice ออกเพื่อไม่ให้ติดในรายงานภาษี
       await tx.taxInvoice.deleteMany({
         where: { invoiceId: id },
       });
